@@ -470,8 +470,12 @@ export default function WandTracker() {
       const wandTip = landmarks[8]; // Index finger tip
 
       if (wandTip && canvasRef.current) {
-        const x = wandTip.x * canvasRef.current.width;
-        const y = wandTip.y * canvasRef.current.height;
+        // Adjust coordinates based on flip settings
+        const normalizedX = flipHorizontal ? (1 - wandTip.x) : wandTip.x;
+        const normalizedY = flipVertical ? (1 - wandTip.y) : wandTip.y;
+        
+        const x = normalizedX * canvasRef.current.width;
+        const y = normalizedY * canvasRef.current.height;
 
         addTrailPoint(x, y);
         lastDetectedTimeRef.current = Date.now();
