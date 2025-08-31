@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Camera, Trash2, Eye, EyeOff, Settings, Wand2, RotateCcw, FlipHorizontal, FlipVertical } from "lucide-react";
+import { Camera, Trash2, Eye, EyeOff, Settings, Wand2, RotateCcw, FlipHorizontal, FlipVertical, Play, Pause } from "lucide-react";
 
 // Trail point class
 // Trail point class
@@ -219,6 +219,7 @@ export default function WandTracker() {
   const [trailLength, setTrailLength] = useState([4]);
   const [sensitivity, setSensitivity] = useState([0.8]);
   const [smoothing, setSmoothing] = useState([3]);
+  const [isPaused, setIsPaused] = useState(false);
   const [wandPosition, setWandPosition] = useState({ x: 0, y: 0, visible: false });
   const [currentTab, setCurrentTab] = useState("tracker");
   const [detectedSpell, setDetectedSpell] = useState("");
@@ -242,6 +243,7 @@ export default function WandTracker() {
         setTrailLength([settings.trailLength ?? 4]);
         setSensitivity([settings.sensitivity ?? 0.8]);
         setSmoothing([settings.smoothing ?? 3]);
+        setIsPaused(settings.isPaused ?? false);
       }
       
       const savedSpells = localStorage.getItem('wandTracker-spells');
@@ -267,14 +269,15 @@ export default function WandTracker() {
         flipVertical,
         trailLength: trailLength[0],
         sensitivity: sensitivity[0],
-        smoothing: smoothing[0]
+        smoothing: smoothing[0],
+        isPaused
       };
       localStorage.setItem('wandTracker-settings', JSON.stringify(settings));
       localStorage.setItem('wandTracker-spells', JSON.stringify(learnedSpells));
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
-  }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, smoothing, learnedSpells]);
+  }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, smoothing, isPaused, learnedSpells]);
   
   // Load MediaPipe scripts
   const loadMediaPipeScripts = useCallback(() => {
@@ -491,6 +494,13 @@ export default function WandTracker() {
   const onResults = useCallback((results: any) => {
     setMlStatus(true);
 
+    // Skip tracking if paused
+    if (isPaused) {
+      setWandStatus(false);
+      setWandPosition(prev => ({ ...prev, visible: false }));
+      return;
+    }
+
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const landmarks = results.multiHandLandmarks[0];
       const wandTip = landmarks[8]; // Index finger tip
@@ -530,7 +540,7 @@ export default function WandTracker() {
         }
       }
     }
-  }, [addTrailPoint, isLearningSpell]);
+  }, [addTrailPoint, isLearningSpell, isPaused]);
 
   // Initialize MediaPipe Hands
   const initMediaPipe = useCallback(async () => {
@@ -721,14 +731,15 @@ export default function WandTracker() {
       {/* Status Indicators */}
       <div className="status-indicators absolute top-4 left-4 z-20 flex flex-col space-y-2 sm:space-y-2">
         <StatusIndicator status={cameraStatus} label="Camera" />
-        <StatusIndicator status={mlStatus} label="ML Tracking" />
-        <StatusIndicator status={wandStatus} label="Wand Detected" />
+        <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Scanning Paused" : "ML Tracking"} />
+        <StatusIndicator status={wandStatus && !isPaused} label="Wand Detected" />
         {debugMode && (
           <div className="bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
             <div className="text-xs text-muted-foreground space-y-1">
               <div>Sensitivity: {sensitivity[0]}</div>
               <div>Trail Length: {trailLength[0]}s</div>
               <div>Smoothing: {smoothing[0]} points</div>
+              <div>Scanning: {isPaused ? 'Paused' : 'Active'}</div>
               <div>Wand Status: {wandStatus ? 'Detected' : 'Not detected'}</div>
               <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
               <div>Learning: {isLearningSpell ? `Step ${learningStep + 1}/3` : 'Off'}</div>
@@ -761,6 +772,25 @@ export default function WandTracker() {
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Clear Trail</span>
+                </Button>
+
+                <Button
+                  onClick={() => setIsPaused(!isPaused)}
+                  variant={isPaused ? "default" : "secondary"}
+                  className="flex items-center space-x-2 w-full sm:w-auto"
+                  data-testid="button-pause-scanning"
+                >
+                  {isPaused ? (
+                    <>
+                      <Play className="w-4 h-4" />
+                      <span>Resume</span>
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="w-4 h-4" />
+                      <span>Pause</span>
+                    </>
+                  )}
                 </Button>
 
                 <div className="flex items-center space-x-2 w-full sm:w-auto">
