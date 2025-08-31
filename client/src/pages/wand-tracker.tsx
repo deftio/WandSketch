@@ -234,6 +234,7 @@ export default function WandTracker() {
   const [spellsEnabled, setSpellsEnabled] = useState(true);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [spellWindow, setSpellWindow] = useState([20]); // Number of points to analyze for spells
+  const spellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -392,23 +393,34 @@ export default function WandTracker() {
     spellPointsRef.current.push([x, y]);
     
     // Check for spell recognition periodically (without interrupting tracking)
-    if (spellsEnabled && timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > spellWindow[0]) {
-      // Use a copy for recognition so we don't interrupt tracking
-      const recentPoints = spellPointsRef.current.slice(-spellWindow[0]);
-      const recognized = recognizeSpellPattern(recentPoints);
-      if (recognized && (!isLearningSpell || recognized !== currentSpellName)) {
-        console.log(`🔮 Casting spell: ${recognized}`);
-        setDetectedSpell(recognized);
-        
-        // Clear the spell display after 2 seconds
-        setTimeout(() => {
-          setDetectedSpell("");
-        }, 2000);
-        
-        // Reset spell recognition window instead of clearing all points
-        lastSpellCheckRef.current = timestamp + 1000; // Pause recognition for 1 second
+    if (spellsEnabled && timestamp - lastSpellCheckRef.current > 1000 && spellPointsRef.current.length > spellWindow[0]) {
+      try {
+        // Use a copy for recognition so we don't interrupt tracking
+        const recentPoints = spellPointsRef.current.slice(-spellWindow[0]);
+        const recognized = recognizeSpellPattern(recentPoints);
+        if (recognized && (!isLearningSpell || recognized !== currentSpellName)) {
+          console.log(`🔮 Casting spell: ${recognized}`);
+          setDetectedSpell(recognized);
+          
+          // Clear any existing timeout first
+          if (spellTimeoutRef.current) {
+            clearTimeout(spellTimeoutRef.current);
+          }
+          
+          // Set new timeout
+          spellTimeoutRef.current = setTimeout(() => {
+            setDetectedSpell("");
+            spellTimeoutRef.current = null;
+          }, 2000);
+          
+          // Pause recognition for 2 seconds after detection
+          lastSpellCheckRef.current = timestamp + 2000;
+        }
+        lastSpellCheckRef.current = timestamp;
+      } catch (error) {
+        console.error('Spell recognition error:', error);
+        lastSpellCheckRef.current = timestamp + 1000;
       }
-      lastSpellCheckRef.current = timestamp;
     }
     
     // Keep spell points manageable but don't clear during active tracking
@@ -550,30 +562,40 @@ export default function WandTracker() {
 
   // Simple pattern matching using vector comparison
   const recognizeSpellPattern = useCallback((drawnPattern: number[][]) => {
-    if (Object.keys(learnedSpells).length === 0 || drawnPattern.length < 5) return null;
-    
-    // Normalize the drawn pattern
-    const normalizedDrawn = normalizePattern(drawnPattern);
-    
-    let bestMatch = null;
-    let bestScore = Infinity;
-    const threshold = 200; // Lower = more strict matching
-    
-    Object.entries(learnedSpells).forEach(([spellName, pattern]) => {
-      const normalizedSpell = normalizePattern(pattern);
-      const distance = calculatePatternDistance(normalizedDrawn, normalizedSpell);
+    try {
+      if (Object.keys(learnedSpells).length === 0 || drawnPattern.length < 5) return null;
       
-      if (distance < bestScore && distance < threshold) {
-        bestScore = distance;
-        bestMatch = spellName;
+      // Normalize the drawn pattern
+      const normalizedDrawn = normalizePattern(drawnPattern);
+      if (normalizedDrawn.length === 0) return null;
+      
+      let bestMatch = null;
+      let bestScore = Infinity;
+      const threshold = 200; // Lower = more strict matching
+      
+      Object.entries(learnedSpells).forEach(([spellName, pattern]) => {
+        if (!pattern || pattern.length === 0) return;
+        
+        const normalizedSpell = normalizePattern(pattern);
+        if (normalizedSpell.length === 0) return;
+        
+        const distance = calculatePatternDistance(normalizedDrawn, normalizedSpell);
+        
+        if (distance < bestScore && distance < threshold) {
+          bestScore = distance;
+          bestMatch = spellName;
+        }
+      });
+      
+      if (bestMatch) {
+        console.log(`🔮 Spell recognized: ${bestMatch} (distance: ${bestScore.toFixed(1)})`);
       }
-    });
-    
-    if (bestMatch) {
-      console.log(`🔮 Spell recognized: ${bestMatch} (distance: ${bestScore.toFixed(1)})`);
+      
+      return bestMatch;
+    } catch (error) {
+      console.error('Pattern recognition error:', error);
+      return null;
     }
-    
-    return bestMatch;
   }, [learnedSpells]);
 
   // Normalize pattern to standard size and position
@@ -857,6 +879,9 @@ export default function WandTracker() {
       }
       if (spellTimeout) {
         clearTimeout(spellTimeout);
+      }
+      if (spellTimeoutRef.current) {
+        clearTimeout(spellTimeoutRef.current);
       }
     };
   }, [spellTimeout]);
