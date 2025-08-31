@@ -230,6 +230,7 @@ export default function WandTracker() {
   const [debugMode, setDebugMode] = useState(false);
   const [learningStep, setLearningStep] = useState(0);
   const [learningProgress, setLearningProgress] = useState("");
+  const [isLoadingSpells, setIsLoadingSpells] = useState(false);
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -485,8 +486,12 @@ export default function WandTracker() {
   }, [currentSpellName, learnedSpells, showSpellDetection, checkPatternSimilarity]);
 
   // Load Harry Potter spells
-  const loadHarryPotterSpells = useCallback(() => {
+  const loadHarryPotterSpells = useCallback(async () => {
+    if (isLoadingSpells) return; // Prevent multiple clicks
+    
     console.log('Loading Harry Potter spells...');
+    setIsLoadingSpells(true);
+    
     try {
       const harryPotterSpells = {
         "Lumos": [[0, 0], [0, -50]], // Simple up stroke
@@ -506,23 +511,32 @@ export default function WandTracker() {
         "Rictusempra": [[0, 0], [10, -10], [-10, -10], [10, 10], [-10, 10], [0, 0]] // Tickle wiggle
       };
 
+      // Use setTimeout to prevent UI blocking
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       console.log('Merging spells...');
       const newSpells = { ...learnedSpells, ...harryPotterSpells };
       setLearnedSpells(newSpells);
       
+      // Add to recognizer in chunks to prevent blocking
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
       console.log('Adding to recognizer...');
-      // Add all to recognizer
       Object.entries(harryPotterSpells).forEach(([name, pattern]) => {
         recognizerRef.current.addTemplate(name, pattern);
       });
+      
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       console.log('Showing success message...');
       showSpellDetection(`✨ Loaded ${Object.keys(harryPotterSpells).length} Harry Potter spells!`);
       console.log('Harry Potter spells loaded successfully');
     } catch (error) {
       console.error('Error loading Harry Potter spells:', error);
+    } finally {
+      setIsLoadingSpells(false);
     }
-  }, [learnedSpells, showSpellDetection]);
+  }, [learnedSpells, showSpellDetection, isLoadingSpells]);
 
   // Draw trail
   const drawTrail = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -1032,10 +1046,11 @@ export default function WandTracker() {
                     </div>
                     <Button
                       onClick={loadHarryPotterSpells}
+                      disabled={isLoadingSpells}
                       className="w-full"
                       data-testid="button-load-hp-spells"
                     >
-                      Activate Harry Potter Spells
+                      {isLoadingSpells ? "Loading Spells..." : "Activate Harry Potter Spells"}
                     </Button>
                   </CardContent>
                 </Card>
