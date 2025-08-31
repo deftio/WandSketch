@@ -1,6 +1,8 @@
-# 🪄 Harry Potter Wand Tracker
+# 🪄 Wand Tracker
 
 A magical web application that uses computer vision and machine learning to track wand movements and recognize spell patterns in real-time.
+
+Inspired by a visit to Hogsmeade :) 
 
 ## ✨ Features
 
@@ -24,7 +26,7 @@ A magical web application that uses computer vision and machine learning to trac
 ### ⚙️ Customizable Settings
 - **Camera Controls**: Show/hide video feed, flip horizontal/vertical
 - **Trail Customization**: Adjust trail length (1-8 seconds) and opacity
-- **Sensitivity Tuning**: Fine-tune detection sensitivity (0.1-1.0)
+- **Sensitivity Tuning**: Fine-tune detection sensitivity (0.1-1.0) - your mileage may vary
 - **Persistent Storage**: All settings and spells saved automatically
 
 ## 🚀 Getting Started
