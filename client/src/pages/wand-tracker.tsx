@@ -233,6 +233,7 @@ export default function WandTracker() {
   const [isLoadingSpells, setIsLoadingSpells] = useState(false);
   const [spellsEnabled, setSpellsEnabled] = useState(true);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
+  const [spellWindow, setSpellWindow] = useState([20]); // Number of points to analyze for spells
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -390,9 +391,11 @@ export default function WandTracker() {
     // Add original point for spell recognition (unsmoothed for accuracy)
     spellPointsRef.current.push([x, y]);
     
-    // Check for spell recognition periodically
-    if (spellsEnabled && timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > 10) {
-      const recognized = recognizeSpellPattern(spellPointsRef.current);
+    // Check for spell recognition periodically (without interrupting tracking)
+    if (spellsEnabled && timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > spellWindow[0]) {
+      // Use a copy for recognition so we don't interrupt tracking
+      const recentPoints = spellPointsRef.current.slice(-spellWindow[0]);
+      const recognized = recognizeSpellPattern(recentPoints);
       if (recognized && (!isLearningSpell || recognized !== currentSpellName)) {
         console.log(`🔮 Casting spell: ${recognized}`);
         setDetectedSpell(recognized);
@@ -402,14 +405,15 @@ export default function WandTracker() {
           setDetectedSpell("");
         }, 2000);
         
-        spellPointsRef.current = []; // Clear points after recognition
+        // Reset spell recognition window instead of clearing all points
+        lastSpellCheckRef.current = timestamp + 1000; // Pause recognition for 1 second
       }
       lastSpellCheckRef.current = timestamp;
     }
     
-    // Clear spell points if too old or too many
-    if (spellPointsRef.current.length > 100 || timestamp - lastDetectedTimeRef.current > 2000) {
-      spellPointsRef.current = [];
+    // Keep spell points manageable but don't clear during active tracking
+    if (spellPointsRef.current.length > spellWindow[0] * 3) {
+      spellPointsRef.current = spellPointsRef.current.slice(-spellWindow[0] * 2);
     }
 
     // Remove old trail points
@@ -1024,6 +1028,20 @@ export default function WandTracker() {
                     data-testid="slider-smoothing"
                   />
                   <span className="text-sm text-foreground w-4">{smoothing[0]}</span>
+                </div>
+
+                <div className="flex items-center space-x-2 w-full sm:w-auto">
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">Spell Window:</label>
+                  <Slider
+                    value={spellWindow}
+                    onValueChange={setSpellWindow}
+                    min={10}
+                    max={50}
+                    step={5}
+                    className="w-20"
+                    data-testid="slider-spell-window"
+                  />
+                  <span className="text-sm text-foreground w-6">{spellWindow[0]}</span>
                 </div>
               </div>
             </div>
