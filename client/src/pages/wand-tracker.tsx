@@ -33,108 +33,6 @@ class TrailPoint {
   }
 }
 
-// Signal processing utilities
-class SignalProcessor {
-  private history: number[][];
-  private readonly maxHistory: number;
-  
-  constructor(maxHistory = 5) {
-    this.history = [];
-    this.maxHistory = maxHistory;
-  }
-  
-  // Moving average smoothing
-  smooth(point: number[]): number[] {
-    this.history.push(point);
-    if (this.history.length > this.maxHistory) {
-      this.history.shift();
-    }
-    
-    const smoothed = [0, 0];
-    for (const p of this.history) {
-      smoothed[0] += p[0];
-      smoothed[1] += p[1];
-    }
-    
-    return [smoothed[0] / this.history.length, smoothed[1] / this.history.length];
-  }
-  
-  // Velocity-based outlier detection
-  isValidMovement(newPoint: number[], lastPoint: number[] | null, maxVelocity = 200): boolean {
-    if (!lastPoint) return true;
-    
-    const distance = Math.sqrt(
-      (newPoint[0] - lastPoint[0]) ** 2 + (newPoint[1] - lastPoint[1]) ** 2
-    );
-    
-    return distance <= maxVelocity;
-  }
-  
-  // Clear history
-  reset() {
-    this.history = [];
-  }
-}
-
-// Enhanced wand tracking with multiple landmarks  
-class WandDetector {
-  private smoothProcessor: SignalProcessor;
-  private lastValidPoint: number[] | null;
-  private confidenceThreshold: number;
-  
-  constructor(confidenceThreshold: number = 0.7) {
-    this.smoothProcessor = new SignalProcessor(3);
-    this.lastValidPoint = null;
-    this.confidenceThreshold = confidenceThreshold;
-  }
-  
-  // Get best wand tip position from hand landmarks
-  getWandTip(landmarks: any, handedness: string = 'Right'): { point: number[] | null; confidence: number } {
-    if (!landmarks || landmarks.length === 0) {
-      return { point: null, confidence: 0 };
-    }
-    
-    // Prioritize index finger for simplicity and reliability
-    const indexTip = landmarks[8]; // Index finger tip
-    
-    if (indexTip && indexTip.visibility !== undefined && indexTip.visibility > this.confidenceThreshold) {
-      const rawPoint = [indexTip.x, indexTip.y];
-      
-      // Validate movement with more lenient velocity check
-      if (!this.smoothProcessor.isValidMovement(rawPoint, this.lastValidPoint, 300)) {
-        return { point: this.lastValidPoint, confidence: indexTip.visibility * 0.7 };
-      }
-      
-      // Apply lighter smoothing for more responsiveness
-      const smoothedPoint = this.smoothProcessor.smooth(rawPoint);
-      this.lastValidPoint = smoothedPoint;
-      
-      return { point: smoothedPoint, confidence: indexTip.visibility };
-    }
-    
-    // Fallback to other fingers if index finger not detected well
-    const fingerTips = [landmarks[12], landmarks[16], landmarks[20]];
-    
-    for (const tip of fingerTips) {
-      if (tip && tip.visibility !== undefined && tip.visibility > this.confidenceThreshold) {
-        const rawPoint = [tip.x, tip.y];
-        
-        if (this.smoothProcessor.isValidMovement(rawPoint, this.lastValidPoint, 300)) {
-          const smoothedPoint = this.smoothProcessor.smooth(rawPoint);
-          this.lastValidPoint = smoothedPoint;
-          return { point: smoothedPoint, confidence: tip.visibility };
-        }
-      }
-    }
-    
-    return { point: null, confidence: 0 };
-  }
-  
-  reset() {
-    this.smoothProcessor.reset();
-    this.lastValidPoint = null;
-  }
-}
 
 // Unistroke recognition class for spell patterns
 class UnistrokeRecognizer {
@@ -305,10 +203,9 @@ export default function WandTracker() {
   const trailPointsRef = useRef<TrailPoint[]>([]);
   const lastDetectedTimeRef = useRef<number>(0);
   const recognizerRef = useRef<UnistrokeRecognizer>(new UnistrokeRecognizer());
-  const wandTrackerRef = useRef<WandDetector>(new WandDetector(0.3));
   const spellPointsRef = useRef<number[][]>([]);
   const lastSpellCheckRef = useRef<number>(0);
-  const trackingConfidenceRef = useRef<number>(0);
+  const learningPatternsRef = useRef<number[][][]>([]);
 
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -327,9 +224,9 @@ export default function WandTracker() {
   const [learnedSpells, setLearnedSpells] = useState<{ [key: string]: number[][] }>({});
   const [currentSpellName, setCurrentSpellName] = useState("");
   const [isLearningSpell, setIsLearningSpell] = useState(false);
-  const [trackingQuality, setTrackingQuality] = useState(0);
   const [debugMode, setDebugMode] = useState(false);
-  const [lastHandResults, setLastHandResults] = useState<any>(null);
+  const [learningStep, setLearningStep] = useState(0);
+  const [learningProgress, setLearningProgress] = useState("");
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -480,24 +377,47 @@ export default function WandTracker() {
     setSpellTimeout(timeout);
   }, [spellTimeout]);
   
-  // Learn spell
-  const learnSpell = useCallback(() => {
-    if (!currentSpellName.trim() || spellPointsRef.current.length < 5) {
+  // Finish learning a single pattern
+  const finishLearningPattern = useCallback(() => {
+    if (spellPointsRef.current.length < 5) return;
+    
+    learningPatternsRef.current.push([...spellPointsRef.current]);
+    spellPointsRef.current = [];
+    
+    const nextStep = learningStep + 1;
+    setLearningStep(nextStep);
+    
+    if (nextStep < 3) {
+      setLearningProgress(`Pattern ${nextStep}/3 learned. Draw it ${3 - nextStep} more time${3 - nextStep === 1 ? '' : 's'}.`);
+    } else {
+      // Learn spell with averaged pattern
+      completeSpellLearning();
+    }
+  }, [learningStep, learnedSpells, showSpellDetection]);
+  
+  // Complete spell learning after 3 patterns
+  const completeSpellLearning = useCallback(() => {
+    if (!currentSpellName.trim() || learningPatternsRef.current.length < 3) {
       return;
     }
     
+    // Use the first pattern as the template (could average them for better results)
     const spellName = currentSpellName.trim();
-    const newSpells = { ...learnedSpells, [spellName]: spellPointsRef.current.slice() };
+    const template = learningPatternsRef.current[0];
     
+    const newSpells = { ...learnedSpells, [spellName]: template };
     setLearnedSpells(newSpells);
-    recognizerRef.current.addTemplate(spellName, spellPointsRef.current);
+    recognizerRef.current.addTemplate(spellName, template);
     
     // Clear learning state
     setCurrentSpellName("");
     setIsLearningSpell(false);
+    setLearningStep(0);
+    setLearningProgress("");
+    learningPatternsRef.current = [];
     spellPointsRef.current = [];
     
-    showSpellDetection(`Learned: ${spellName}`);
+    showSpellDetection(`✨ Learned: ${spellName}`);
   }, [currentSpellName, learnedSpells, showSpellDetection]);
 
   // Draw trail
@@ -544,21 +464,14 @@ export default function WandTracker() {
   // Handle hand detection results
   const onResults = useCallback((results: any) => {
     setMlStatus(true);
-    setLastHandResults(results); // Store for debug visualization
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const landmarks = results.multiHandLandmarks[0];
-      const handedness = results.multiHandedness?.[0]?.label || 'Right';
-      
-      // Use enhanced wand tracking with lower threshold
-      const { point: wandTip, confidence } = wandTrackerRef.current.getWandTip(landmarks, handedness);
-      
-      trackingConfidenceRef.current = confidence;
-      setTrackingQuality(confidence);
+      const wandTip = landmarks[8]; // Index finger tip
 
-      if (wandTip && canvasRef.current && confidence > 0.2) {
-        const x = wandTip[0] * canvasRef.current.width;
-        const y = wandTip[1] * canvasRef.current.height;
+      if (wandTip && canvasRef.current) {
+        const x = wandTip.x * canvasRef.current.width;
+        const y = wandTip.y * canvasRef.current.height;
 
         addTrailPoint(x, y);
         lastDetectedTimeRef.current = Date.now();
@@ -566,29 +479,28 @@ export default function WandTracker() {
         setWandPosition({ x, y, visible: true });
         setWandStatus(true);
         
-        // If learning a spell and we have enough points, auto-learn
-        if (isLearningSpell && spellPointsRef.current.length > 20 && currentSpellName.trim()) {
-          learnSpell();
+        // Handle spell learning with multiple patterns
+        if (isLearningSpell && spellPointsRef.current.length > 15) {
+          finishLearningPattern();
         }
       } else {
         setWandStatus(false);
       }
     } else {
       setWandStatus(false);
-      wandTrackerRef.current.reset();
-      trackingConfidenceRef.current = 0;
-      setTrackingQuality(0);
 
-      // Hide wand indicator if no hand detected for 300ms (more responsive)
-      if (Date.now() - lastDetectedTimeRef.current > 300) {
+      // Hide wand indicator if no hand detected for 500ms
+      if (Date.now() - lastDetectedTimeRef.current > 500) {
         setWandPosition(prev => ({ ...prev, visible: false }));
         // Clear spell points if no detection for a while
-        if (Date.now() - lastDetectedTimeRef.current > 800) {
-          spellPointsRef.current = [];
+        if (Date.now() - lastDetectedTimeRef.current > 1000) {
+          if (!isLearningSpell) {
+            spellPointsRef.current = [];
+          }
         }
       }
     }
-  }, [addTrailPoint, isLearningSpell, currentSpellName, learnSpell]);
+  }, [addTrailPoint, isLearningSpell]);
 
   // Initialize MediaPipe Hands
   const initMediaPipe = useCallback(async () => {
@@ -780,13 +692,15 @@ export default function WandTracker() {
       <div className="status-indicators absolute top-4 left-4 z-20 flex flex-col space-y-2 sm:space-y-2">
         <StatusIndicator status={cameraStatus} label="Camera" />
         <StatusIndicator status={mlStatus} label="ML Tracking" />
-        <StatusIndicator status={wandStatus} label={`Wand ${Math.round(trackingQuality * 100)}%`} />
+        <StatusIndicator status={wandStatus} label="Wand Detected" />
         {debugMode && (
           <div className="bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
             <div className="text-xs text-muted-foreground space-y-1">
               <div>Sensitivity: {sensitivity[0]}</div>
               <div>Trail Length: {trailLength[0]}s</div>
-              <div>Points: {spellPointsRef.current?.length || 0}</div>
+              <div>Wand Status: {wandStatus ? 'Detected' : 'Not detected'}</div>
+              <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
+              <div>Learning: {isLearningSpell ? `Step ${learningStep + 1}/3` : 'Off'}</div>
             </div>
           </div>
         )}
@@ -917,15 +831,18 @@ export default function WandTracker() {
                       <Button
                         onClick={() => {
                           if (isLearningSpell) {
-                            if (currentSpellName.trim() && spellPointsRef.current.length > 5) {
-                              learnSpell();
-                            } else {
-                              setIsLearningSpell(false);
-                              spellPointsRef.current = [];
-                            }
+                            // Cancel learning
+                            setIsLearningSpell(false);
+                            setLearningStep(0);
+                            setLearningProgress("");
+                            learningPatternsRef.current = [];
+                            spellPointsRef.current = [];
                           } else {
                             if (currentSpellName.trim()) {
                               setIsLearningSpell(true);
+                              setLearningStep(0);
+                              setLearningProgress("Draw the first pattern...");
+                              learningPatternsRef.current = [];
                               spellPointsRef.current = [];
                             }
                           }
@@ -935,7 +852,7 @@ export default function WandTracker() {
                         className="w-full sm:w-auto"
                         data-testid="button-learn-spell"
                       >
-                        {isLearningSpell ? 'Save Spell' : 'Learn'}
+                        {isLearningSpell ? 'Cancel' : 'Learn Spell'}
                       </Button>
                     </div>
                     <div className="mt-4">
@@ -950,14 +867,21 @@ export default function WandTracker() {
                       </div>
                       {debugMode && (
                         <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                          <div>Tracking: {trackingQuality > 0 ? `${Math.round(trackingQuality * 100)}%` : 'No detection'}</div>
+                          <div>Wand Status: {wandStatus ? 'Detected' : 'Not detected'}</div>
                           <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
-                          <div>Hand Detected: {lastHandResults?.multiHandLandmarks?.length > 0 ? 'Yes' : 'No'}</div>
+                          <div>Learning: {isLearningSpell ? `Pattern ${learningStep + 1}/3` : 'Off'}</div>
                         </div>
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {isLearningSpell ? 'Draw the spell pattern with your wand...' : `${Object.keys(learnedSpells).length} spells learned`}
+                      {isLearningSpell ? (
+                        <div className="space-y-1">
+                          <div className="font-medium text-accent">🔮 Learning Mode Active</div>
+                          <div>{learningProgress || `Draw pattern ${learningStep + 1}/3`}</div>
+                        </div>
+                      ) : (
+                        <div>{Object.keys(learnedSpells).length} spells learned</div>
+                      )}
                     </div>
                     {Object.keys(learnedSpells).length > 0 && (
                       <div className="space-y-2">
