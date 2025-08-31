@@ -807,7 +807,7 @@ export default function WandTracker() {
       />
 
       {/* Status Indicators */}
-      <div className="status-indicators absolute top-4 left-4 right-4 z-20 flex flex-row justify-center space-x-3">
+      <div className="status-indicators absolute top-4 left-4 right-4 z-10 flex flex-row justify-center space-x-3">
         <StatusIndicator status={cameraStatus} label="Camera" />
         <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Paused" : "Tracking"} />
         <StatusIndicator status={wandStatus && !isPaused} label="Wand" />
@@ -827,7 +827,7 @@ export default function WandTracker() {
       </div>
 
       {/* Main Control Panel */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 w-full max-w-4xl px-4">
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-30 w-full max-w-4xl px-4">
         <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="tracker" className="flex items-center space-x-2" data-testid="tab-tracker">
