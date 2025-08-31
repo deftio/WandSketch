@@ -33,6 +33,117 @@ class TrailPoint {
   }
 }
 
+// Signal processing utilities
+class SignalProcessor {
+  private history: number[][];
+  private readonly maxHistory: number;
+  
+  constructor(maxHistory = 5) {
+    this.history = [];
+    this.maxHistory = maxHistory;
+  }
+  
+  // Moving average smoothing
+  smooth(point: number[]): number[] {
+    this.history.push(point);
+    if (this.history.length > this.maxHistory) {
+      this.history.shift();
+    }
+    
+    const smoothed = [0, 0];
+    for (const p of this.history) {
+      smoothed[0] += p[0];
+      smoothed[1] += p[1];
+    }
+    
+    return [smoothed[0] / this.history.length, smoothed[1] / this.history.length];
+  }
+  
+  // Velocity-based outlier detection
+  isValidMovement(newPoint: number[], lastPoint: number[] | null, maxVelocity = 200): boolean {
+    if (!lastPoint) return true;
+    
+    const distance = Math.sqrt(
+      (newPoint[0] - lastPoint[0]) ** 2 + (newPoint[1] - lastPoint[1]) ** 2
+    );
+    
+    return distance <= maxVelocity;
+  }
+  
+  // Clear history
+  reset() {
+    this.history = [];
+  }
+}
+
+// Enhanced wand tracking with multiple landmarks  
+class WandDetector {
+  private smoothProcessor: SignalProcessor;
+  private lastValidPoint: number[] | null;
+  private confidenceThreshold: number;
+  
+  constructor(confidenceThreshold: number = 0.7) {
+    this.smoothProcessor = new SignalProcessor(3);
+    this.lastValidPoint = null;
+    this.confidenceThreshold = confidenceThreshold;
+  }
+  
+  // Get best wand tip position from hand landmarks
+  getWandTip(landmarks: any, handedness: string = 'Right'): { point: number[] | null; confidence: number } {
+    if (!landmarks || landmarks.length === 0) {
+      return { point: null, confidence: 0 };
+    }
+    
+    // Use multiple landmarks for better tracking
+    const fingerTips = [
+      landmarks[8],  // Index finger tip
+      landmarks[12], // Middle finger tip
+      landmarks[16], // Ring finger tip
+      landmarks[20]  // Pinky tip
+    ];
+    
+    // Find the most extended finger (highest point)
+    let bestTip = null;
+    let bestConfidence = 0;
+    
+    for (const tip of fingerTips) {
+      if (tip && tip.visibility !== undefined && tip.visibility > this.confidenceThreshold) {
+        // For right hand, prefer index finger; for left hand, prefer pinky
+        let confidence = tip.visibility;
+        if (handedness === 'Right' && tip === landmarks[8]) confidence += 0.1;
+        if (handedness === 'Left' && tip === landmarks[20]) confidence += 0.1;
+        
+        if (confidence > bestConfidence) {
+          bestTip = tip;
+          bestConfidence = confidence;
+        }
+      }
+    }
+    
+    if (!bestTip) {
+      return { point: null, confidence: 0 };
+    }
+    
+    const rawPoint = [bestTip.x, bestTip.y];
+    
+    // Validate movement
+    if (!this.smoothProcessor.isValidMovement(rawPoint, this.lastValidPoint)) {
+      return { point: this.lastValidPoint, confidence: bestConfidence * 0.5 };
+    }
+    
+    // Apply smoothing
+    const smoothedPoint = this.smoothProcessor.smooth(rawPoint);
+    this.lastValidPoint = smoothedPoint;
+    
+    return { point: smoothedPoint, confidence: bestConfidence };
+  }
+  
+  reset() {
+    this.smoothProcessor.reset();
+    this.lastValidPoint = null;
+  }
+}
+
 // Unistroke recognition class for spell patterns
 class UnistrokeRecognizer {
   templates: { [key: string]: number[][] };
@@ -202,8 +313,10 @@ export default function WandTracker() {
   const trailPointsRef = useRef<TrailPoint[]>([]);
   const lastDetectedTimeRef = useRef<number>(0);
   const recognizerRef = useRef<UnistrokeRecognizer>(new UnistrokeRecognizer());
+  const wandTrackerRef = useRef<WandDetector>(new WandDetector(0.6));
   const spellPointsRef = useRef<number[][]>([]);
   const lastSpellCheckRef = useRef<number>(0);
+  const trackingConfidenceRef = useRef<number>(0);
 
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -222,6 +335,7 @@ export default function WandTracker() {
   const [learnedSpells, setLearnedSpells] = useState<{ [key: string]: number[][] }>({});
   const [currentSpellName, setCurrentSpellName] = useState("");
   const [isLearningSpell, setIsLearningSpell] = useState(false);
+  const [trackingQuality, setTrackingQuality] = useState(0);
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -439,11 +553,17 @@ export default function WandTracker() {
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const landmarks = results.multiHandLandmarks[0];
-      const wandTip = landmarks[8]; // Index finger tip
+      const handedness = results.multiHandedness?.[0]?.label || 'Right';
+      
+      // Use enhanced wand tracking
+      const { point: wandTip, confidence } = wandTrackerRef.current.getWandTip(landmarks, handedness);
+      
+      trackingConfidenceRef.current = confidence;
+      setTrackingQuality(confidence);
 
-      if (wandTip && canvasRef.current) {
-        const x = wandTip.x * canvasRef.current.width;
-        const y = wandTip.y * canvasRef.current.height;
+      if (wandTip && canvasRef.current && confidence > 0.5) {
+        const x = wandTip[0] * canvasRef.current.width;
+        const y = wandTip[1] * canvasRef.current.height;
 
         addTrailPoint(x, y);
         lastDetectedTimeRef.current = Date.now();
@@ -460,6 +580,9 @@ export default function WandTracker() {
       }
     } else {
       setWandStatus(false);
+      wandTrackerRef.current.reset();
+      trackingConfidenceRef.current = 0;
+      setTrackingQuality(0);
 
       // Hide wand indicator if no hand detected for 500ms
       if (Date.now() - lastDetectedTimeRef.current > 500) {
@@ -662,7 +785,7 @@ export default function WandTracker() {
       <div className="status-indicators absolute top-4 left-4 z-20 flex flex-col space-y-2 sm:space-y-2">
         <StatusIndicator status={cameraStatus} label="Camera" />
         <StatusIndicator status={mlStatus} label="ML Tracking" />
-        <StatusIndicator status={wandStatus} label="Wand Detected" />
+        <StatusIndicator status={wandStatus} label={`Wand ${Math.round(trackingQuality * 100)}%`} />
       </div>
 
       {/* Main Control Panel */}
