@@ -392,7 +392,14 @@ export default function WandTracker() {
     if (timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > 10) {
       const recognized = recognizeSpellPattern(spellPointsRef.current);
       if (recognized && (!isLearningSpell || recognized !== currentSpellName)) {
-        showSpellDetection(recognized);
+        console.log(`🔮 Casting spell: ${recognized}`);
+        setDetectedSpell(recognized);
+        
+        // Clear the spell display after 2 seconds
+        setTimeout(() => {
+          setDetectedSpell("");
+        }, 2000);
+        
         spellPointsRef.current = []; // Clear points after recognition
       }
       lastSpellCheckRef.current = timestamp;
@@ -409,7 +416,7 @@ export default function WandTracker() {
     trailPointsRef.current = trailPointsRef.current.filter(point => 
       point.update(currentTime, trailLengthMs)
     );
-  }, [smoothing, trailLength, isLearningSpell, currentSpellName, showSpellDetection]);
+  }, [smoothing, trailLength, isLearningSpell, currentSpellName]);
   
   // Finish learning a single pattern
   const finishLearningPattern = useCallback(() => {
@@ -482,8 +489,13 @@ export default function WandTracker() {
     learningPatternsRef.current = [];
     spellPointsRef.current = [];
     
-    showSpellDetection(`✨ Learned: ${spellName}`);
-  }, [currentSpellName, learnedSpells, showSpellDetection, checkPatternSimilarity]);
+    setDetectedSpell(`✨ Learned: ${spellName}`);
+    
+    // Clear the spell display after 3 seconds
+    setTimeout(() => {
+      setDetectedSpell("");
+    }, 3000);
+  }, [currentSpellName, learnedSpells, checkPatternSimilarity]);
 
   // Load Harry Potter spells
   const loadHarryPotterSpells = useCallback(() => {
