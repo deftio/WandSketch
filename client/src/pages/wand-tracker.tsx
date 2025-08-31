@@ -390,9 +390,9 @@ export default function WandTracker() {
     
     // Check for spell recognition periodically
     if (timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > 10) {
-      const recognized = recognizerRef.current.recognize(spellPointsRef.current);
-      if (recognized && (!isLearningSpell || recognized.name !== currentSpellName)) {
-        showSpellDetection(recognized.name);
+      const recognized = recognizeSpellPattern(spellPointsRef.current);
+      if (recognized && (!isLearningSpell || recognized !== currentSpellName)) {
+        showSpellDetection(recognized);
         spellPointsRef.current = []; // Clear points after recognition
       }
       lastSpellCheckRef.current = timestamp;
@@ -529,6 +529,74 @@ export default function WandTracker() {
       console.error('Error loading Harry Potter spells:', error);
     }
   }, [learnedSpells]);
+
+  // Simple pattern matching using vector comparison
+  const recognizeSpellPattern = useCallback((drawnPattern: number[][]) => {
+    if (Object.keys(learnedSpells).length === 0 || drawnPattern.length < 5) return null;
+    
+    // Normalize the drawn pattern
+    const normalizedDrawn = normalizePattern(drawnPattern);
+    
+    let bestMatch = null;
+    let bestScore = Infinity;
+    const threshold = 200; // Lower = more strict matching
+    
+    Object.entries(learnedSpells).forEach(([spellName, pattern]) => {
+      const normalizedSpell = normalizePattern(pattern);
+      const distance = calculatePatternDistance(normalizedDrawn, normalizedSpell);
+      
+      if (distance < bestScore && distance < threshold) {
+        bestScore = distance;
+        bestMatch = spellName;
+      }
+    });
+    
+    if (bestMatch) {
+      console.log(`🔮 Spell recognized: ${bestMatch} (distance: ${bestScore.toFixed(1)})`);
+    }
+    
+    return bestMatch;
+  }, [learnedSpells]);
+
+  // Normalize pattern to standard size and position
+  const normalizePattern = useCallback((pattern: number[][]) => {
+    if (pattern.length === 0) return [];
+    
+    // Find bounds
+    const xs = pattern.map(p => p[0]);
+    const ys = pattern.map(p => p[1]);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    
+    const width = maxX - minX || 1;
+    const height = maxY - minY || 1;
+    const scale = Math.max(width, height) || 1;
+    
+    // Normalize to 0-100 range
+    return pattern.map(([x, y]) => [
+      ((x - minX) / scale) * 100,
+      ((y - minY) / scale) * 100
+    ]);
+  }, []);
+
+  // Calculate distance between two normalized patterns
+  const calculatePatternDistance = useCallback((pattern1: number[][], pattern2: number[][]) => {
+    const maxLength = Math.max(pattern1.length, pattern2.length);
+    let totalDistance = 0;
+    
+    for (let i = 0; i < maxLength; i++) {
+      const p1 = pattern1[Math.min(i, pattern1.length - 1)] || [0, 0];
+      const p2 = pattern2[Math.min(i, pattern2.length - 1)] || [0, 0];
+      
+      const dx = p1[0] - p2[0];
+      const dy = p1[1] - p2[1];
+      totalDistance += Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    return totalDistance / maxLength;
+  }, []);
 
   // Draw trail
   const drawTrail = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -1172,14 +1240,14 @@ export default function WandTracker() {
 
       {/* Spell Detection Display */}
       {detectedSpell && (
-        <div className="spell-notification absolute bottom-32 left-1/2 transform -translate-x-1/2 z-30">
-          <div className="bg-accent/90 backdrop-blur-sm text-accent-foreground px-6 py-3 rounded-lg border border-accent/50 shadow-lg">
+        <div className="spell-notification absolute bottom-[25vh] left-1/2 transform -translate-x-1/2 z-25">
+          <div className="bg-purple-900/95 backdrop-blur-sm text-purple-100 px-8 py-4 rounded-xl border-2 border-purple-400/50 shadow-2xl">
             <div className="text-center">
-              <div className="text-base sm:text-lg font-bold flex items-center justify-center space-x-2">
-                <Wand2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="truncate max-w-48">{detectedSpell}</span>
+              <div className="text-lg sm:text-xl font-bold flex items-center justify-center space-x-2">
+                <Wand2 className="w-5 h-5 sm:w-6 sm:h-6 text-purple-300" />
+                <span className="truncate max-w-64">{detectedSpell}</span>
               </div>
-              <div className="text-xs text-accent-foreground/80 mt-1">Spell Cast!</div>
+              <div className="text-sm text-purple-200/90 mt-1">✨ Spell Recognized!</div>
             </div>
           </div>
         </div>
