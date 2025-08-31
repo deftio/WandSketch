@@ -922,7 +922,22 @@ export default function WandTracker() {
         <div className="flex items-center space-x-2 bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
           <Switch
             checked={spellsEnabled}
-            onCheckedChange={setSpellsEnabled}
+            onCheckedChange={(checked) => {
+              setSpellsEnabled(checked);
+              
+              // When disabling spells, clear everything spell-related
+              if (!checked) {
+                setDetectedSpell(""); // Clear any displayed spell
+                spellPointsRef.current = []; // Clear spell recognition data
+                lastSpellCheckRef.current = 0; // Reset spell check timer
+                
+                // Clear any pending spell timeout
+                if (spellTimeoutRef.current) {
+                  clearTimeout(spellTimeoutRef.current);
+                  spellTimeoutRef.current = null;
+                }
+              }
+            }}
             className="scale-75"
             data-testid="switch-spells"
           />
