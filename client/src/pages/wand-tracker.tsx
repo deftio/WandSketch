@@ -729,10 +729,10 @@ export default function WandTracker() {
       />
 
       {/* Status Indicators */}
-      <div className="status-indicators absolute top-4 left-4 z-20 flex flex-col space-y-2 sm:space-y-2">
+      <div className="status-indicators absolute top-4 left-4 right-4 z-20 flex flex-row justify-center space-x-3">
         <StatusIndicator status={cameraStatus} label="Camera" />
-        <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Scanning Paused" : "ML Tracking"} />
-        <StatusIndicator status={wandStatus && !isPaused} label="Wand Detected" />
+        <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Paused" : "Tracking"} />
+        <StatusIndicator status={wandStatus && !isPaused} label="Wand" />
         {debugMode && (
           <div className="bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
             <div className="text-xs text-muted-foreground space-y-1">
@@ -751,10 +751,14 @@ export default function WandTracker() {
       {/* Main Control Panel */}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 w-full max-w-4xl px-4">
         <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="tracker" className="flex items-center space-x-2">
               <Wand2 className="w-4 h-4" />
               <span className="hidden sm:inline">Tracker</span>
+            </TabsTrigger>
+            <TabsTrigger value="spells" className="flex items-center space-x-2">
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline">Spells</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center space-x-2">
               <Settings className="w-4 h-4" />
@@ -764,7 +768,7 @@ export default function WandTracker() {
 
           <TabsContent value="tracker">
             <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
-              <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6">
+              <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4">
                 <Button
                   onClick={clearCanvas}
                   className="flex items-center space-x-2 w-full sm:w-auto"
@@ -822,18 +826,132 @@ export default function WandTracker() {
                 </div>
 
                 <div className="flex items-center space-x-2 w-full sm:w-auto">
-                  <label className="text-sm text-muted-foreground whitespace-nowrap">Smoothing:</label>
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">Smooth:</label>
                   <Slider
                     value={smoothing}
                     onValueChange={setSmoothing}
                     min={1}
                     max={10}
                     step={1}
-                    className="w-20"
+                    className="w-16"
                     data-testid="slider-smoothing"
                   />
-                  <span className="text-sm text-foreground w-6">{smoothing[0]}</span>
+                  <span className="text-sm text-foreground w-4">{smoothing[0]}</span>
                 </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="spells">
+            <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
+              <div className="space-y-6">
+                {/* Spell Learning */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center space-x-2">
+                      <Wand2 className="w-5 h-5" />
+                      <span>Learn New Spell</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                      <Input
+                        placeholder="Spell name (e.g., Lumos)"
+                        value={currentSpellName}
+                        onChange={(e) => setCurrentSpellName(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-spell-name"
+                      />
+                      <Button
+                        onClick={() => {
+                          if (isLearningSpell) {
+                            // Cancel learning
+                            setIsLearningSpell(false);
+                            setLearningStep(0);
+                            setLearningProgress("");
+                            learningPatternsRef.current = [];
+                            spellPointsRef.current = [];
+                          } else {
+                            if (currentSpellName.trim()) {
+                              setIsLearningSpell(true);
+                              setLearningStep(0);
+                              setLearningProgress("Draw the first pattern...");
+                              learningPatternsRef.current = [];
+                              spellPointsRef.current = [];
+                            }
+                          }
+                        }}
+                        variant={isLearningSpell ? "destructive" : "default"}
+                        disabled={!currentSpellName.trim()}
+                        className="w-full sm:w-auto"
+                        data-testid="button-learn-spell"
+                      >
+                        {isLearningSpell ? 'Cancel' : 'Learn Spell'}
+                      </Button>
+                    </div>
+                    
+                    <div className="text-sm text-muted-foreground">
+                      {isLearningSpell ? (
+                        <div className="space-y-1">
+                          <div className="font-medium text-accent">🔮 Learning Mode Active</div>
+                          <div>{learningProgress || `Draw pattern ${learningStep + 1}/3`}</div>
+                        </div>
+                      ) : (
+                        <div>{Object.keys(learnedSpells).length} spells learned</div>
+                      )}
+                    </div>
+                    
+                    {Object.keys(learnedSpells).length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Learned Spells:</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.keys(learnedSpells).map(spell => (
+                            <div key={spell} className="flex items-center space-x-1 px-2 py-1 bg-accent rounded text-xs">
+                              <span>{spell}</span>
+                              <button
+                                onClick={() => {
+                                  const newSpells = { ...learnedSpells };
+                                  delete newSpells[spell];
+                                  setLearnedSpells(newSpells);
+                                  recognizerRef.current.templates = newSpells;
+                                }}
+                                className="text-destructive hover:text-destructive/80 ml-1"
+                                data-testid={`button-delete-spell-${spell}`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Debug Mode */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Debug Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="debug-mode" className="text-sm">Debug Mode</Label>
+                      <Switch
+                        id="debug-mode"
+                        checked={debugMode}
+                        onCheckedChange={setDebugMode}
+                        data-testid="switch-debug-mode"
+                      />
+                    </div>
+                    {debugMode && (
+                      <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                        <div>Wand Status: {wandStatus ? 'Detected' : 'Not detected'}</div>
+                        <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
+                        <div>Learning: {isLearningSpell ? `Pattern ${learningStep + 1}/3` : 'Off'}</div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </div>
           </TabsContent>
@@ -886,104 +1004,6 @@ export default function WandTracker() {
                   </CardContent>
                 </Card>
 
-                {/* Spell Learning */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center space-x-2">
-                      <Wand2 className="w-5 h-5" />
-                      <span>Spell Learning</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                      <Input
-                        placeholder="Spell name (e.g., Lumos)"
-                        value={currentSpellName}
-                        onChange={(e) => setCurrentSpellName(e.target.value)}
-                        className="flex-1"
-                        data-testid="input-spell-name"
-                      />
-                      <Button
-                        onClick={() => {
-                          if (isLearningSpell) {
-                            // Cancel learning
-                            setIsLearningSpell(false);
-                            setLearningStep(0);
-                            setLearningProgress("");
-                            learningPatternsRef.current = [];
-                            spellPointsRef.current = [];
-                          } else {
-                            if (currentSpellName.trim()) {
-                              setIsLearningSpell(true);
-                              setLearningStep(0);
-                              setLearningProgress("Draw the first pattern...");
-                              learningPatternsRef.current = [];
-                              spellPointsRef.current = [];
-                            }
-                          }
-                        }}
-                        variant={isLearningSpell ? "destructive" : "default"}
-                        disabled={!currentSpellName.trim()}
-                        className="w-full sm:w-auto"
-                        data-testid="button-learn-spell"
-                      >
-                        {isLearningSpell ? 'Cancel' : 'Learn Spell'}
-                      </Button>
-                    </div>
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="debug-mode" className="text-sm">Debug Mode</Label>
-                        <Switch
-                          id="debug-mode"
-                          checked={debugMode}
-                          onCheckedChange={setDebugMode}
-                          data-testid="switch-debug-mode"
-                        />
-                      </div>
-                      {debugMode && (
-                        <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                          <div>Wand Status: {wandStatus ? 'Detected' : 'Not detected'}</div>
-                          <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
-                          <div>Learning: {isLearningSpell ? `Pattern ${learningStep + 1}/3` : 'Off'}</div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {isLearningSpell ? (
-                        <div className="space-y-1">
-                          <div className="font-medium text-accent">🔮 Learning Mode Active</div>
-                          <div>{learningProgress || `Draw pattern ${learningStep + 1}/3`}</div>
-                        </div>
-                      ) : (
-                        <div>{Object.keys(learnedSpells).length} spells learned</div>
-                      )}
-                    </div>
-                    {Object.keys(learnedSpells).length > 0 && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Learned Spells:</Label>
-                        <div className="flex flex-wrap gap-2">
-                          {Object.keys(learnedSpells).map(spell => (
-                            <div key={spell} className="flex items-center space-x-1 px-2 py-1 bg-accent rounded text-xs">
-                              <span>{spell}</span>
-                              <button
-                                onClick={() => {
-                                  const newSpells = { ...learnedSpells };
-                                  delete newSpells[spell];
-                                  setLearnedSpells(newSpells);
-                                  recognizerRef.current.templates = newSpells;
-                                }}
-                                className="text-destructive hover:text-destructive/80 ml-1"
-                                data-testid={`button-delete-spell-${spell}`}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
               </div>
             </div>
           </TabsContent>
