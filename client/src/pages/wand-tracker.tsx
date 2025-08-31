@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Card, CardContent } from "@/components/ui/card";
-import { Camera, Trash2, Eye, EyeOff } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Camera, Trash2, Eye, EyeOff, Settings, Wand2, RotateCcw, FlipHorizontal, FlipVertical } from "lucide-react";
 
+// Trail point class
 // Trail point class
 class TrailPoint {
   x: number;
@@ -28,6 +33,159 @@ class TrailPoint {
   }
 }
 
+// Unistroke recognition class for spell patterns
+class UnistrokeRecognizer {
+  templates: { [key: string]: number[][] };
+  
+  constructor() {
+    this.templates = {};
+  }
+  
+  addTemplate(name: string, points: number[][]) {
+    this.templates[name] = this.normalizePoints(points);
+  }
+  
+  recognize(points: number[][]): { name: string; score: number } | null {
+    if (points.length < 5) return null;
+    
+    const normalized = this.normalizePoints(points);
+    let bestMatch = { name: '', score: 0 };
+    
+    for (const [name, template] of Object.entries(this.templates)) {
+      const score = this.calculateSimilarity(normalized, template);
+      if (score > bestMatch.score && score > 0.7) { // Threshold for recognition
+        bestMatch = { name, score };
+      }
+    }
+    
+    return bestMatch.score > 0 ? bestMatch : null;
+  }
+  
+  private normalizePoints(points: number[][]): number[][] {
+    if (points.length === 0) return [];
+    
+    // Resample to fixed number of points
+    const resampled = this.resample(points, 64);
+    
+    // Rotate to indicative angle
+    const rotated = this.rotateToZero(resampled);
+    
+    // Scale to unit square
+    const scaled = this.scaleToSquare(rotated);
+    
+    // Translate to origin
+    return this.translateToOrigin(scaled);
+  }
+  
+  private resample(points: number[][], n: number): number[][] {
+    const length = this.pathLength(points);
+    const interval = length / (n - 1);
+    let distance = 0;
+    const newPoints = [points[0]];
+    
+    for (let i = 1; i < points.length; i++) {
+      const d = this.distance(points[i - 1], points[i]);
+      if (distance + d >= interval) {
+        const x = points[i - 1][0] + ((interval - distance) / d) * (points[i][0] - points[i - 1][0]);
+        const y = points[i - 1][1] + ((interval - distance) / d) * (points[i][1] - points[i - 1][1]);
+        newPoints.push([x, y]);
+        points.splice(i, 0, [x, y]);
+        distance = 0;
+      } else {
+        distance += d;
+      }
+    }
+    
+    if (newPoints.length === n - 1) {
+      newPoints.push(points[points.length - 1]);
+    }
+    
+    return newPoints;
+  }
+  
+  private pathLength(points: number[][]): number {
+    let length = 0;
+    for (let i = 1; i < points.length; i++) {
+      length += this.distance(points[i - 1], points[i]);
+    }
+    return length;
+  }
+  
+  private distance(p1: number[], p2: number[]): number {
+    return Math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2);
+  }
+  
+  private rotateToZero(points: number[][]): number[][] {
+    const centroid = this.centroid(points);
+    const theta = Math.atan2(centroid[1] - points[0][1], centroid[0] - points[0][0]);
+    return this.rotateBy(points, -theta);
+  }
+  
+  private centroid(points: number[][]): number[] {
+    let x = 0, y = 0;
+    for (const point of points) {
+      x += point[0];
+      y += point[1];
+    }
+    return [x / points.length, y / points.length];
+  }
+  
+  private rotateBy(points: number[][], theta: number): number[][] {
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const centroid = this.centroid(points);
+    
+    return points.map(point => [
+      (point[0] - centroid[0]) * cos - (point[1] - centroid[1]) * sin + centroid[0],
+      (point[0] - centroid[0]) * sin + (point[1] - centroid[1]) * cos + centroid[1]
+    ]);
+  }
+  
+  private scaleToSquare(points: number[][]): number[][] {
+    const bounds = this.boundingBox(points);
+    const size = Math.max(bounds.width, bounds.height);
+    
+    if (size === 0) return points;
+    
+    return points.map(point => [
+      point[0] * (250 / size),
+      point[1] * (250 / size)
+    ]);
+  }
+  
+  private boundingBox(points: number[][]) {
+    let minX = points[0][0], maxX = points[0][0];
+    let minY = points[0][1], maxY = points[0][1];
+    
+    for (const point of points) {
+      minX = Math.min(minX, point[0]);
+      maxX = Math.max(maxX, point[0]);
+      minY = Math.min(minY, point[1]);
+      maxY = Math.max(maxY, point[1]);
+    }
+    
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  }
+  
+  private translateToOrigin(points: number[][]): number[][] {
+    const centroid = this.centroid(points);
+    return points.map(point => [point[0] - centroid[0], point[1] - centroid[1]]);
+  }
+  
+  private calculateSimilarity(points1: number[][], points2: number[][]): number {
+    let distance = 0;
+    for (let i = 0; i < points1.length; i++) {
+      distance += this.distance(points1[i], points2[i]);
+    }
+    return Math.max(0, 1 - distance / (0.5 * Math.sqrt(250 * 250 + 250 * 250)));
+  }
+}
+
 declare global {
   interface Window {
     Hands: any;
@@ -43,6 +201,9 @@ export default function WandTracker() {
   const cameraRef = useRef<any>(null);
   const trailPointsRef = useRef<TrailPoint[]>([]);
   const lastDetectedTimeRef = useRef<number>(0);
+  const recognizerRef = useRef<UnistrokeRecognizer>(new UnistrokeRecognizer());
+  const spellPointsRef = useRef<number[][]>([]);
+  const lastSpellCheckRef = useRef<number>(0);
 
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -50,10 +211,62 @@ export default function WandTracker() {
   const [mlStatus, setMlStatus] = useState(false);
   const [wandStatus, setWandStatus] = useState(false);
   const [isVideoVisible, setIsVideoVisible] = useState(true);
+  const [flipHorizontal, setFlipHorizontal] = useState(true);
+  const [flipVertical, setFlipVertical] = useState(false);
   const [trailLength, setTrailLength] = useState([4]);
   const [sensitivity, setSensitivity] = useState([0.8]);
   const [wandPosition, setWandPosition] = useState({ x: 0, y: 0, visible: false });
+  const [currentTab, setCurrentTab] = useState("tracker");
+  const [detectedSpell, setDetectedSpell] = useState("");
+  const [spellTimeout, setSpellTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [learnedSpells, setLearnedSpells] = useState<{ [key: string]: number[][] }>({});
+  const [currentSpellName, setCurrentSpellName] = useState("");
+  const [isLearningSpell, setIsLearningSpell] = useState(false);
 
+  // Load settings from localStorage
+  const loadSettings = useCallback(() => {
+    try {
+      const savedSettings = localStorage.getItem('wandTracker-settings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        setIsVideoVisible(settings.isVideoVisible ?? true);
+        setFlipHorizontal(settings.flipHorizontal ?? true);
+        setFlipVertical(settings.flipVertical ?? false);
+        setTrailLength([settings.trailLength ?? 4]);
+        setSensitivity([settings.sensitivity ?? 0.8]);
+      }
+      
+      const savedSpells = localStorage.getItem('wandTracker-spells');
+      if (savedSpells) {
+        const spells = JSON.parse(savedSpells);
+        setLearnedSpells(spells);
+        // Load spells into recognizer
+        Object.entries(spells).forEach(([name, points]) => {
+          recognizerRef.current.addTemplate(name, points as number[][]);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  }, []);
+  
+  // Save settings to localStorage
+  const saveSettings = useCallback(() => {
+    try {
+      const settings = {
+        isVideoVisible,
+        flipHorizontal,
+        flipVertical,
+        trailLength: trailLength[0],
+        sensitivity: sensitivity[0]
+      };
+      localStorage.setItem('wandTracker-settings', JSON.stringify(settings));
+      localStorage.setItem('wandTracker-spells', JSON.stringify(learnedSpells));
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    }
+  }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, learnedSpells]);
+  
   // Load MediaPipe scripts
   const loadMediaPipeScripts = useCallback(() => {
     return new Promise<void>((resolve, reject) => {
@@ -115,14 +328,69 @@ export default function WandTracker() {
   const addTrailPoint = useCallback((x: number, y: number) => {
     const timestamp = Date.now();
     trailPointsRef.current.push(new TrailPoint(x, y, timestamp));
+    
+    // Add point for spell recognition
+    spellPointsRef.current.push([x, y]);
+    
+    // Check for spell recognition periodically
+    if (timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > 10) {
+      const recognized = recognizerRef.current.recognize(spellPointsRef.current);
+      if (recognized && (!isLearningSpell || recognized.name !== currentSpellName)) {
+        showSpellDetection(recognized.name);
+        spellPointsRef.current = []; // Clear points after recognition
+      }
+      lastSpellCheckRef.current = timestamp;
+    }
+    
+    // Clear spell points if too old or too many
+    if (spellPointsRef.current.length > 100 || timestamp - lastDetectedTimeRef.current > 2000) {
+      spellPointsRef.current = [];
+    }
 
-    // Remove old points
+    // Remove old trail points
     const currentTime = Date.now();
     const trailLengthMs = trailLength[0] * 1000;
     trailPointsRef.current = trailPointsRef.current.filter(point => 
       point.update(currentTime, trailLengthMs)
     );
-  }, [trailLength]);
+  }, [trailLength, isLearningSpell, currentSpellName]);
+  
+  // Show spell detection
+  const showSpellDetection = useCallback((spellName: string) => {
+    setDetectedSpell(spellName);
+    
+    // Clear previous timeout
+    if (spellTimeout) {
+      clearTimeout(spellTimeout);
+    }
+    
+    // Set new timeout
+    const timeout = setTimeout(() => {
+      setDetectedSpell("");
+    }, 8000);
+    
+    setSpellTimeout(timeout);
+  }, [spellTimeout]);
+  
+  // Learn spell
+  const learnSpell = useCallback(() => {
+    if (!currentSpellName.trim() || spellPointsRef.current.length < 5) {
+      return;
+    }
+    
+    const spellName = currentSpellName.trim();
+    const newSpells = { ...learnedSpells, [spellName]: spellPointsRef.current.slice() };
+    
+    setLearnedSpells(newSpells);
+    recognizerRef.current.addTemplate(spellName, spellPointsRef.current);
+    
+    // Clear learning state
+    setCurrentSpellName("");
+    setIsLearningSpell(false);
+    spellPointsRef.current = [];
+    
+    showSpellDetection(`Learned: ${spellName}`);
+  }, [currentSpellName, learnedSpells, showSpellDetection]);
 
   // Draw trail
   const drawTrail = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -182,6 +450,11 @@ export default function WandTracker() {
 
         setWandPosition({ x, y, visible: true });
         setWandStatus(true);
+        
+        // If learning a spell and we have enough points, auto-learn
+        if (isLearningSpell && spellPointsRef.current.length > 20 && currentSpellName.trim()) {
+          learnSpell();
+        }
       } else {
         setWandStatus(false);
       }
@@ -191,9 +464,13 @@ export default function WandTracker() {
       // Hide wand indicator if no hand detected for 500ms
       if (Date.now() - lastDetectedTimeRef.current > 500) {
         setWandPosition(prev => ({ ...prev, visible: false }));
+        // Clear spell points if no detection for a while
+        if (Date.now() - lastDetectedTimeRef.current > 1000) {
+          spellPointsRef.current = [];
+        }
       }
     }
-  }, [addTrailPoint]);
+  }, [addTrailPoint, isLearningSpell, currentSpellName, learnSpell]);
 
   // Initialize MediaPipe Hands
   const initMediaPipe = useCallback(async () => {
@@ -305,6 +582,7 @@ export default function WandTracker() {
   // Clear canvas
   const clearCanvas = useCallback(() => {
     trailPointsRef.current = [];
+    spellPointsRef.current = [];
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -314,6 +592,16 @@ export default function WandTracker() {
     }
   }, []);
 
+  // Load settings on mount
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+  
+  // Save settings when they change
+  useEffect(() => {
+    saveSettings();
+  }, [saveSettings]);
+  
   // Update sensitivity
   useEffect(() => {
     if (handsRef.current) {
@@ -333,13 +621,16 @@ export default function WandTracker() {
       if (cameraRef.current) {
         cameraRef.current.stop();
       }
+      if (spellTimeout) {
+        clearTimeout(spellTimeout);
+      }
     };
-  }, []);
+  }, [spellTimeout]);
 
   const StatusIndicator = ({ status, label }: { status: boolean; label: string }) => (
     <div className="flex items-center space-x-2 bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
       <div className={`w-2 h-2 rounded-full ${status ? 'bg-green-500' : 'bg-red-500'} ${!status ? 'status-indicator' : ''}`} />
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">{label}</span>
     </div>
   );
 
@@ -357,7 +648,10 @@ export default function WandTracker() {
       <video
         ref={videoRef}
         id="webcamVideo"
-        className={`absolute top-4 right-4 w-48 h-36 bg-card border border-border rounded-lg shadow-lg z-10 ${isVideoVisible ? 'block' : 'hidden'}`}
+        className={`absolute top-4 right-4 w-48 h-36 bg-card border border-border rounded-lg shadow-lg z-10 transition-transform ${isVideoVisible ? 'block' : 'hidden'}`}
+        style={{
+          transform: `scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1})`
+        }}
         autoPlay
         muted
         playsInline
@@ -365,63 +659,191 @@ export default function WandTracker() {
       />
 
       {/* Status Indicators */}
-      <div className="absolute top-4 left-4 z-20 space-y-2">
+      <div className="status-indicators absolute top-4 left-4 z-20 flex flex-col space-y-2 sm:space-y-2">
         <StatusIndicator status={cameraStatus} label="Camera" />
         <StatusIndicator status={mlStatus} label="ML Tracking" />
         <StatusIndicator status={wandStatus} label="Wand Detected" />
       </div>
 
-      {/* Control Panel */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
-        <div className="control-panel px-6 py-4 rounded-xl shadow-xl">
-          <div className="flex items-center space-x-6">
-            <Button
-              onClick={clearCanvas}
-              className="flex items-center space-x-2"
-              data-testid="button-clear-canvas"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Clear</span>
-            </Button>
+      {/* Main Control Panel */}
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 w-full max-w-4xl px-4">
+        <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="tracker" className="flex items-center space-x-2">
+              <Wand2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Tracker</span>
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center space-x-2">
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </TabsTrigger>
+          </TabsList>
 
-            <div className="flex items-center space-x-2">
-              <label className="text-sm text-muted-foreground">Trail Length:</label>
-              <Slider
-                value={trailLength}
-                onValueChange={setTrailLength}
-                min={1}
-                max={8}
-                step={1}
-                className="w-20"
-                data-testid="slider-trail-length"
-              />
-              <span className="text-sm text-foreground w-6">{trailLength[0]}s</span>
+          <TabsContent value="tracker">
+            <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
+              <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6">
+                <Button
+                  onClick={clearCanvas}
+                  className="flex items-center space-x-2 w-full sm:w-auto"
+                  data-testid="button-clear-canvas"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Clear Trail</span>
+                </Button>
+
+                <div className="flex items-center space-x-2 w-full sm:w-auto">
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">Trail:</label>
+                  <Slider
+                    value={trailLength}
+                    onValueChange={setTrailLength}
+                    min={1}
+                    max={8}
+                    step={1}
+                    className="w-20"
+                    data-testid="slider-trail-length"
+                  />
+                  <span className="text-sm text-foreground w-6">{trailLength[0]}s</span>
+                </div>
+
+                <div className="flex items-center space-x-2 w-full sm:w-auto">
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">Sensitivity:</label>
+                  <Slider
+                    value={sensitivity}
+                    onValueChange={setSensitivity}
+                    min={0.1}
+                    max={1}
+                    step={0.1}
+                    className="w-20"
+                    data-testid="slider-sensitivity"
+                  />
+                  <span className="text-sm text-foreground w-8">{sensitivity[0]}</span>
+                </div>
+              </div>
             </div>
+          </TabsContent>
 
-            <div className="flex items-center space-x-2">
-              <label className="text-sm text-muted-foreground">Sensitivity:</label>
-              <Slider
-                value={sensitivity}
-                onValueChange={setSensitivity}
-                min={0.1}
-                max={1}
-                step={0.1}
-                className="w-20"
-                data-testid="slider-sensitivity"
-              />
-              <span className="text-sm text-foreground w-8">{sensitivity[0]}</span>
+          <TabsContent value="settings">
+            <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                {/* Camera Settings */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center space-x-2">
+                      <Camera className="w-5 h-5" />
+                      <span>Camera Settings</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="show-video" className="text-sm">Show Video Feed</Label>
+                      <Switch
+                        id="show-video"
+                        checked={isVideoVisible}
+                        onCheckedChange={setIsVideoVisible}
+                        data-testid="switch-video-visibility"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="flip-horizontal" className="text-sm flex items-center space-x-2">
+                        <FlipHorizontal className="w-4 h-4" />
+                        <span>Flip Horizontal</span>
+                      </Label>
+                      <Switch
+                        id="flip-horizontal"
+                        checked={flipHorizontal}
+                        onCheckedChange={setFlipHorizontal}
+                        data-testid="switch-flip-horizontal"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="flip-vertical" className="text-sm flex items-center space-x-2">
+                        <FlipVertical className="w-4 h-4" />
+                        <span>Flip Vertical</span>
+                      </Label>
+                      <Switch
+                        id="flip-vertical"
+                        checked={flipVertical}
+                        onCheckedChange={setFlipVertical}
+                        data-testid="switch-flip-vertical"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Spell Learning */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center space-x-2">
+                      <Wand2 className="w-5 h-5" />
+                      <span>Spell Learning</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                      <Input
+                        placeholder="Spell name (e.g., Lumos)"
+                        value={currentSpellName}
+                        onChange={(e) => setCurrentSpellName(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-spell-name"
+                      />
+                      <Button
+                        onClick={() => {
+                          if (isLearningSpell) {
+                            if (currentSpellName.trim() && spellPointsRef.current.length > 5) {
+                              learnSpell();
+                            } else {
+                              setIsLearningSpell(false);
+                              spellPointsRef.current = [];
+                            }
+                          } else {
+                            if (currentSpellName.trim()) {
+                              setIsLearningSpell(true);
+                              spellPointsRef.current = [];
+                            }
+                          }
+                        }}
+                        variant={isLearningSpell ? "destructive" : "default"}
+                        disabled={!currentSpellName.trim()}
+                        className="w-full sm:w-auto"
+                        data-testid="button-learn-spell"
+                      >
+                        {isLearningSpell ? 'Save Spell' : 'Learn'}
+                      </Button>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {isLearningSpell ? 'Draw the spell pattern with your wand...' : `${Object.keys(learnedSpells).length} spells learned`}
+                    </div>
+                    {Object.keys(learnedSpells).length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Learned Spells:</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.keys(learnedSpells).map(spell => (
+                            <div key={spell} className="flex items-center space-x-1 px-2 py-1 bg-accent rounded text-xs">
+                              <span>{spell}</span>
+                              <button
+                                onClick={() => {
+                                  const newSpells = { ...learnedSpells };
+                                  delete newSpells[spell];
+                                  setLearnedSpells(newSpells);
+                                  recognizerRef.current.templates = newSpells;
+                                }}
+                                className="text-destructive hover:text-destructive/80 ml-1"
+                                data-testid={`button-delete-spell-${spell}`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-
-            <Button
-              onClick={() => setIsVideoVisible(!isVideoVisible)}
-              variant="secondary"
-              data-testid="button-toggle-video"
-            >
-              {isVideoVisible ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
-              {isVideoVisible ? 'Hide Video' : 'Show Video'}
-            </Button>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Camera Permission Modal */}
@@ -463,6 +885,21 @@ export default function WandTracker() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Spell Detection Display */}
+      {detectedSpell && (
+        <div className="spell-notification absolute bottom-32 left-1/2 transform -translate-x-1/2 z-30">
+          <div className="bg-accent/90 backdrop-blur-sm text-accent-foreground px-6 py-3 rounded-lg border border-accent/50 shadow-lg">
+            <div className="text-center">
+              <div className="text-base sm:text-lg font-bold flex items-center justify-center space-x-2">
+                <Wand2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="truncate max-w-48">{detectedSpell}</span>
+              </div>
+              <div className="text-xs text-accent-foreground/80 mt-1">Spell Cast!</div>
+            </div>
+          </div>
         </div>
       )}
 
