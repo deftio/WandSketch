@@ -94,48 +94,40 @@ class WandDetector {
       return { point: null, confidence: 0 };
     }
     
-    // Use multiple landmarks for better tracking
-    const fingerTips = [
-      landmarks[8],  // Index finger tip
-      landmarks[12], // Middle finger tip
-      landmarks[16], // Ring finger tip
-      landmarks[20]  // Pinky tip
-    ];
+    // Prioritize index finger for simplicity and reliability
+    const indexTip = landmarks[8]; // Index finger tip
     
-    // Find the most extended finger (highest point)
-    let bestTip = null;
-    let bestConfidence = 0;
+    if (indexTip && indexTip.visibility !== undefined && indexTip.visibility > this.confidenceThreshold) {
+      const rawPoint = [indexTip.x, indexTip.y];
+      
+      // Validate movement with more lenient velocity check
+      if (!this.smoothProcessor.isValidMovement(rawPoint, this.lastValidPoint, 300)) {
+        return { point: this.lastValidPoint, confidence: indexTip.visibility * 0.7 };
+      }
+      
+      // Apply lighter smoothing for more responsiveness
+      const smoothedPoint = this.smoothProcessor.smooth(rawPoint);
+      this.lastValidPoint = smoothedPoint;
+      
+      return { point: smoothedPoint, confidence: indexTip.visibility };
+    }
+    
+    // Fallback to other fingers if index finger not detected well
+    const fingerTips = [landmarks[12], landmarks[16], landmarks[20]];
     
     for (const tip of fingerTips) {
       if (tip && tip.visibility !== undefined && tip.visibility > this.confidenceThreshold) {
-        // For right hand, prefer index finger; for left hand, prefer pinky
-        let confidence = tip.visibility;
-        if (handedness === 'Right' && tip === landmarks[8]) confidence += 0.1;
-        if (handedness === 'Left' && tip === landmarks[20]) confidence += 0.1;
+        const rawPoint = [tip.x, tip.y];
         
-        if (confidence > bestConfidence) {
-          bestTip = tip;
-          bestConfidence = confidence;
+        if (this.smoothProcessor.isValidMovement(rawPoint, this.lastValidPoint, 300)) {
+          const smoothedPoint = this.smoothProcessor.smooth(rawPoint);
+          this.lastValidPoint = smoothedPoint;
+          return { point: smoothedPoint, confidence: tip.visibility };
         }
       }
     }
     
-    if (!bestTip) {
-      return { point: null, confidence: 0 };
-    }
-    
-    const rawPoint = [bestTip.x, bestTip.y];
-    
-    // Validate movement
-    if (!this.smoothProcessor.isValidMovement(rawPoint, this.lastValidPoint)) {
-      return { point: this.lastValidPoint, confidence: bestConfidence * 0.5 };
-    }
-    
-    // Apply smoothing
-    const smoothedPoint = this.smoothProcessor.smooth(rawPoint);
-    this.lastValidPoint = smoothedPoint;
-    
-    return { point: smoothedPoint, confidence: bestConfidence };
+    return { point: null, confidence: 0 };
   }
   
   reset() {
@@ -313,7 +305,7 @@ export default function WandTracker() {
   const trailPointsRef = useRef<TrailPoint[]>([]);
   const lastDetectedTimeRef = useRef<number>(0);
   const recognizerRef = useRef<UnistrokeRecognizer>(new UnistrokeRecognizer());
-  const wandTrackerRef = useRef<WandDetector>(new WandDetector(0.6));
+  const wandTrackerRef = useRef<WandDetector>(new WandDetector(0.3));
   const spellPointsRef = useRef<number[][]>([]);
   const lastSpellCheckRef = useRef<number>(0);
   const trackingConfidenceRef = useRef<number>(0);
@@ -336,6 +328,8 @@ export default function WandTracker() {
   const [currentSpellName, setCurrentSpellName] = useState("");
   const [isLearningSpell, setIsLearningSpell] = useState(false);
   const [trackingQuality, setTrackingQuality] = useState(0);
+  const [debugMode, setDebugMode] = useState(false);
+  const [lastHandResults, setLastHandResults] = useState<any>(null);
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -550,18 +544,19 @@ export default function WandTracker() {
   // Handle hand detection results
   const onResults = useCallback((results: any) => {
     setMlStatus(true);
+    setLastHandResults(results); // Store for debug visualization
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const landmarks = results.multiHandLandmarks[0];
       const handedness = results.multiHandedness?.[0]?.label || 'Right';
       
-      // Use enhanced wand tracking
+      // Use enhanced wand tracking with lower threshold
       const { point: wandTip, confidence } = wandTrackerRef.current.getWandTip(landmarks, handedness);
       
       trackingConfidenceRef.current = confidence;
       setTrackingQuality(confidence);
 
-      if (wandTip && canvasRef.current && confidence > 0.5) {
+      if (wandTip && canvasRef.current && confidence > 0.2) {
         const x = wandTip[0] * canvasRef.current.width;
         const y = wandTip[1] * canvasRef.current.height;
 
@@ -584,11 +579,11 @@ export default function WandTracker() {
       trackingConfidenceRef.current = 0;
       setTrackingQuality(0);
 
-      // Hide wand indicator if no hand detected for 500ms
-      if (Date.now() - lastDetectedTimeRef.current > 500) {
+      // Hide wand indicator if no hand detected for 300ms (more responsive)
+      if (Date.now() - lastDetectedTimeRef.current > 300) {
         setWandPosition(prev => ({ ...prev, visible: false }));
         // Clear spell points if no detection for a while
-        if (Date.now() - lastDetectedTimeRef.current > 1000) {
+        if (Date.now() - lastDetectedTimeRef.current > 800) {
           spellPointsRef.current = [];
         }
       }
@@ -608,9 +603,9 @@ export default function WandTracker() {
 
       hands.setOptions({
         maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: sensitivity[0],
-        minTrackingConfidence: sensitivity[0]
+        modelComplexity: 0,
+        minDetectionConfidence: Math.max(0.3, sensitivity[0] * 0.7),
+        minTrackingConfidence: Math.max(0.3, sensitivity[0] * 0.7)
       });
 
       hands.onResults(onResults);
@@ -786,6 +781,15 @@ export default function WandTracker() {
         <StatusIndicator status={cameraStatus} label="Camera" />
         <StatusIndicator status={mlStatus} label="ML Tracking" />
         <StatusIndicator status={wandStatus} label={`Wand ${Math.round(trackingQuality * 100)}%`} />
+        {debugMode && (
+          <div className="bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>Sensitivity: {sensitivity[0]}</div>
+              <div>Trail Length: {trailLength[0]}s</div>
+              <div>Points: {spellPointsRef.current?.length || 0}</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Control Panel */}
@@ -933,6 +937,24 @@ export default function WandTracker() {
                       >
                         {isLearningSpell ? 'Save Spell' : 'Learn'}
                       </Button>
+                    </div>
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="debug-mode" className="text-sm">Debug Mode</Label>
+                        <Switch
+                          id="debug-mode"
+                          checked={debugMode}
+                          onCheckedChange={setDebugMode}
+                          data-testid="switch-debug-mode"
+                        />
+                      </div>
+                      {debugMode && (
+                        <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                          <div>Tracking: {trackingQuality > 0 ? `${Math.round(trackingQuality * 100)}%` : 'No detection'}</div>
+                          <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
+                          <div>Hand Detected: {lastHandResults?.multiHandLandmarks?.length > 0 ? 'Yes' : 'No'}</div>
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {isLearningSpell ? 'Draw the spell pattern with your wand...' : `${Object.keys(learnedSpells).length} spells learned`}
