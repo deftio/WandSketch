@@ -206,6 +206,7 @@ export default function WandTracker() {
   const spellPointsRef = useRef<number[][]>([]);
   const lastSpellCheckRef = useRef<number>(0);
   const learningPatternsRef = useRef<number[][][]>([]);
+  const rawPointsRef = useRef<{x: number, y: number}[]>([]);
 
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -217,6 +218,7 @@ export default function WandTracker() {
   const [flipVertical, setFlipVertical] = useState(false);
   const [trailLength, setTrailLength] = useState([4]);
   const [sensitivity, setSensitivity] = useState([0.8]);
+  const [smoothing, setSmoothing] = useState([3]);
   const [wandPosition, setWandPosition] = useState({ x: 0, y: 0, visible: false });
   const [currentTab, setCurrentTab] = useState("tracker");
   const [detectedSpell, setDetectedSpell] = useState("");
@@ -239,6 +241,7 @@ export default function WandTracker() {
         setFlipVertical(settings.flipVertical ?? false);
         setTrailLength([settings.trailLength ?? 4]);
         setSensitivity([settings.sensitivity ?? 0.8]);
+        setSmoothing([settings.smoothing ?? 3]);
       }
       
       const savedSpells = localStorage.getItem('wandTracker-spells');
@@ -263,14 +266,15 @@ export default function WandTracker() {
         flipHorizontal,
         flipVertical,
         trailLength: trailLength[0],
-        sensitivity: sensitivity[0]
+        sensitivity: sensitivity[0],
+        smoothing: smoothing[0]
       };
       localStorage.setItem('wandTracker-settings', JSON.stringify(settings));
       localStorage.setItem('wandTracker-spells', JSON.stringify(learnedSpells));
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
-  }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, learnedSpells]);
+  }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, smoothing, learnedSpells]);
   
   // Load MediaPipe scripts
   const loadMediaPipeScripts = useCallback(() => {
@@ -329,12 +333,51 @@ export default function WandTracker() {
     return ctx;
   }, []);
 
-  // Add trail point
+  // Show spell detection
+  const showSpellDetection = useCallback((spellName: string) => {
+    setDetectedSpell(spellName);
+    
+    // Clear previous timeout
+    if (spellTimeout) {
+      clearTimeout(spellTimeout);
+    }
+    
+    // Set new timeout
+    const timeout = setTimeout(() => {
+      setDetectedSpell("");
+    }, 8000);
+    
+    setSpellTimeout(timeout);
+  }, [spellTimeout]);
+
+  // Add trail point with smoothing
   const addTrailPoint = useCallback((x: number, y: number) => {
     const timestamp = Date.now();
-    trailPointsRef.current.push(new TrailPoint(x, y, timestamp));
     
-    // Add point for spell recognition
+    // Add raw point to smoothing buffer
+    rawPointsRef.current.push({ x, y });
+    
+    // Keep only the last N points for smoothing
+    const smoothingPoints = smoothing[0];
+    if (rawPointsRef.current.length > smoothingPoints) {
+      rawPointsRef.current = rawPointsRef.current.slice(-smoothingPoints);
+    }
+    
+    // Calculate smoothed position using moving average
+    let smoothedX = x;
+    let smoothedY = y;
+    
+    if (smoothingPoints > 1 && rawPointsRef.current.length >= 2) {
+      const sumX = rawPointsRef.current.reduce((sum, point) => sum + point.x, 0);
+      const sumY = rawPointsRef.current.reduce((sum, point) => sum + point.y, 0);
+      smoothedX = sumX / rawPointsRef.current.length;
+      smoothedY = sumY / rawPointsRef.current.length;
+    }
+    
+    // Add smoothed point to trail
+    trailPointsRef.current.push(new TrailPoint(smoothedX, smoothedY, timestamp));
+    
+    // Add original point for spell recognition (unsmoothed for accuracy)
     spellPointsRef.current.push([x, y]);
     
     // Check for spell recognition periodically
@@ -358,24 +401,7 @@ export default function WandTracker() {
     trailPointsRef.current = trailPointsRef.current.filter(point => 
       point.update(currentTime, trailLengthMs)
     );
-  }, [trailLength, isLearningSpell, currentSpellName]);
-  
-  // Show spell detection
-  const showSpellDetection = useCallback((spellName: string) => {
-    setDetectedSpell(spellName);
-    
-    // Clear previous timeout
-    if (spellTimeout) {
-      clearTimeout(spellTimeout);
-    }
-    
-    // Set new timeout
-    const timeout = setTimeout(() => {
-      setDetectedSpell("");
-    }, 8000);
-    
-    setSpellTimeout(timeout);
-  }, [spellTimeout]);
+  }, [smoothing, trailLength, isLearningSpell, currentSpellName, showSpellDetection]);
   
   // Finish learning a single pattern
   const finishLearningPattern = useCallback(() => {
@@ -702,6 +728,7 @@ export default function WandTracker() {
             <div className="text-xs text-muted-foreground space-y-1">
               <div>Sensitivity: {sensitivity[0]}</div>
               <div>Trail Length: {trailLength[0]}s</div>
+              <div>Smoothing: {smoothing[0]} points</div>
               <div>Wand Status: {wandStatus ? 'Detected' : 'Not detected'}</div>
               <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
               <div>Learning: {isLearningSpell ? `Step ${learningStep + 1}/3` : 'Off'}</div>
@@ -762,6 +789,20 @@ export default function WandTracker() {
                     data-testid="slider-sensitivity"
                   />
                   <span className="text-sm text-foreground w-8">{sensitivity[0]}</span>
+                </div>
+
+                <div className="flex items-center space-x-2 w-full sm:w-auto">
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">Smoothing:</label>
+                  <Slider
+                    value={smoothing}
+                    onValueChange={setSmoothing}
+                    min={1}
+                    max={10}
+                    step={1}
+                    className="w-20"
+                    data-testid="slider-smoothing"
+                  />
+                  <span className="text-sm text-foreground w-6">{smoothing[0]}</span>
                 </div>
               </div>
             </div>
