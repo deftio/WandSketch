@@ -827,7 +827,7 @@ export default function WandTracker() {
       </div>
 
       {/* Main Control Panel */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-30 w-full max-w-4xl px-4">
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-30 w-full max-w-4xl px-4">
         <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="tracker" className="flex items-center space-x-2" data-testid="tab-tracker">
@@ -921,8 +921,8 @@ export default function WandTracker() {
           </TabsContent>
 
           <TabsContent value="spells">
-            <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
-              <div className="space-y-6">
+            <div className="control-panel px-4 sm:px-6 py-3 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
+              <div className="space-y-3">
                 {/* Spell Learning */}
                 <Card>
                   <CardHeader className="pb-3">
@@ -1075,8 +1075,8 @@ export default function WandTracker() {
           </TabsContent>
 
           <TabsContent value="settings">
-            <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <div className="control-panel px-4 sm:px-6 py-3 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {/* Camera Settings */}
                 <Card>
                   <CardHeader className="pb-3">
