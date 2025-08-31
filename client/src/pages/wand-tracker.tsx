@@ -487,60 +487,48 @@ export default function WandTracker() {
 
   // Load Harry Potter spells
   const loadHarryPotterSpells = useCallback(() => {
-    if (isLoadingSpells) return; // Prevent multiple clicks
-    
-    console.log('Loading Harry Potter spells...');
-    setIsLoadingSpells(true);
-    
-    // Use setTimeout to run async without blocking UI
-    setTimeout(() => {
-      try {
-        const harryPotterSpells = {
-          "Lumos": [[0, 0], [0, -50]], // Simple up stroke
-          "Nox": [[0, 0], [0, 50]], // Simple down stroke
-          "Accio": [[-50, 0], [50, 0]], // Pull toward gesture
-          "Expelliarmus": [[0, 0], [30, -20], [50, 10]], // Flick away
-          "Wingardium Leviosa": [[0, 0], [-20, -10], [20, -10], [0, 0]], // Swish and flick
-          "Stupefy": [[0, 0], [0, -40]], // Straight thrust
-          "Petrificus Totalus": [[0, 0], [30, 0], [0, 30], [-30, 0], [0, -30]], // Binding cross
-          "Alohomora": [[0, 0], [20, 0], [20, 20], [0, 20]], // Key turn motion
-          "Incendio": [[0, 0], [15, -15], [30, 0], [15, 15]], // Flame flick
-          "Aguamenti": [[0, 0], [-20, -10], [-10, 10], [20, -10], [10, 10]], // Water wave
-          "Expecto Patronum": [[0, 0], [30, 0], [21, 21], [0, 30], [-21, 21], [-30, 0], [-21, -21], [0, -30], [21, -21]], // Protective circle
-          "Riddikulus": [[0, 0], [20, -20], [-20, -20], [20, 20], [-20, 20]], // Laugh gesture
-          "Flipendo": [[0, 0], [40, 0]], // Push force
-          "Impedimenta": [[0, 0], [0, -30], [30, -30], [30, 0]], // Blocking wall
-          "Rictusempra": [[0, 0], [10, -10], [-10, -10], [10, 10], [-10, 10], [0, 0]] // Tickle wiggle
-        };
+    try {
+      const harryPotterSpells = {
+        "Lumos": [[0, 0], [0, -50]], // Simple up stroke
+        "Nox": [[0, 0], [0, 50]], // Simple down stroke
+        "Accio": [[-50, 0], [50, 0]], // Pull toward gesture
+        "Expelliarmus": [[0, 0], [30, -20], [50, 10]], // Flick away
+        "Wingardium Leviosa": [[0, 0], [-20, -10], [20, -10], [0, 0]], // Swish and flick
+        "Stupefy": [[0, 0], [0, -40]], // Straight thrust
+        "Petrificus Totalus": [[0, 0], [30, 0], [0, 30], [-30, 0], [0, -30]], // Binding cross
+        "Alohomora": [[0, 0], [20, 0], [20, 20], [0, 20]], // Key turn motion
+        "Incendio": [[0, 0], [15, -15], [30, 0], [15, 15]], // Flame flick
+        "Aguamenti": [[0, 0], [-20, -10], [-10, 10], [20, -10], [10, 10]], // Water wave
+        "Expecto Patronum": [[0, 0], [30, 0], [21, 21], [0, 30], [-21, 21], [-30, 0], [-21, -21], [0, -30], [21, -21]], // Protective circle
+        "Riddikulus": [[0, 0], [20, -20], [-20, -20], [20, 20], [-20, 20]], // Laugh gesture
+        "Flipendo": [[0, 0], [40, 0]], // Push force
+        "Impedimenta": [[0, 0], [0, -30], [30, -30], [30, 0]], // Blocking wall
+        "Rictusempra": [[0, 0], [10, -10], [-10, -10], [10, 10], [-10, 10], [0, 0]] // Tickle wiggle
+      };
 
-        console.log('Merging spells...');
-        const newSpells = { ...learnedSpells, ...harryPotterSpells };
-        setLearnedSpells(newSpells);
-        
-        console.log('Adding to recognizer...');
-        Object.entries(harryPotterSpells).forEach(([name, pattern]) => {
-          recognizerRef.current.addTemplate(name, pattern);
-        });
-        
-        console.log('Showing success message...');
-        setDetectedSpell(`✨ Loaded ${Object.keys(harryPotterSpells).length} Harry Potter spells!`);
-        
-        // Clear message after delay
-        setTimeout(() => {
-          setDetectedSpell("");
-        }, 3000);
-        
-        console.log('Harry Potter spells loaded successfully');
-      } catch (error) {
-        console.error('Error loading Harry Potter spells:', error);
-      } finally {
-        // Force UI update
-        setTimeout(() => {
-          setIsLoadingSpells(false);
-        }, 100);
-      }
-    }, 10); // Very short delay to let UI update
-  }, [learnedSpells, isLoadingSpells]);
+      console.log('Loading Harry Potter spells...');
+      console.log('Merging spells...');
+      const newSpells = { ...learnedSpells, ...harryPotterSpells };
+      setLearnedSpells(newSpells);
+      
+      console.log('Adding to recognizer...');
+      Object.entries(harryPotterSpells).forEach(([name, pattern]) => {
+        recognizerRef.current.addTemplate(name, pattern);
+      });
+      
+      console.log('Showing success message...');
+      setDetectedSpell(`✨ Loaded ${Object.keys(harryPotterSpells).length} Harry Potter spells!`);
+      
+      // Clear message after delay
+      setTimeout(() => {
+        setDetectedSpell("");
+      }, 3000);
+      
+      console.log('Harry Potter spells loaded successfully');
+    } catch (error) {
+      console.error('Error loading Harry Potter spells:', error);
+    }
+  }, [learnedSpells]);
 
   // Draw trail
   const drawTrail = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -1050,11 +1038,10 @@ export default function WandTracker() {
                     </div>
                     <Button
                       onClick={loadHarryPotterSpells}
-                      disabled={isLoadingSpells}
                       className="w-full"
                       data-testid="button-load-hp-spells"
                     >
-                      {isLoadingSpells ? "Loading Spells..." : "Activate Harry Potter Spells"}
+                      Activate Harry Potter Spells
                     </Button>
                   </CardContent>
                 </Card>
