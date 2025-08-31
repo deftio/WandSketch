@@ -534,7 +534,10 @@ export default function WandTracker() {
       } catch (error) {
         console.error('Error loading Harry Potter spells:', error);
       } finally {
-        setIsLoadingSpells(false);
+        // Force UI update
+        setTimeout(() => {
+          setIsLoadingSpells(false);
+        }, 100);
       }
     }, 10); // Very short delay to let UI update
   }, [learnedSpells, isLoadingSpells]);
@@ -839,15 +842,15 @@ export default function WandTracker() {
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 w-full max-w-4xl px-4">
         <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="tracker" className="flex items-center space-x-2">
+            <TabsTrigger value="tracker" className="flex items-center space-x-2" data-testid="tab-tracker">
               <Wand2 className="w-4 h-4" />
               <span className="hidden sm:inline">Tracker</span>
             </TabsTrigger>
-            <TabsTrigger value="spells" className="flex items-center space-x-2">
+            <TabsTrigger value="spells" className="flex items-center space-x-2" data-testid="tab-spells">
               <RotateCcw className="w-4 h-4" />
               <span className="hidden sm:inline">Spells</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center space-x-2">
+            <TabsTrigger value="settings" className="flex items-center space-x-2" data-testid="tab-settings">
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
