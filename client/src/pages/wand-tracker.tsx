@@ -213,7 +213,7 @@ export default function WandTracker() {
   const [cameraStatus, setCameraStatus] = useState(false);
   const [mlStatus, setMlStatus] = useState(false);
   const [wandStatus, setWandStatus] = useState(false);
-  const [isVideoVisible, setIsVideoVisible] = useState(true);
+  const [isVideoVisible, setIsVideoVisible] = useState(false);
   const [flipHorizontal, setFlipHorizontal] = useState(true);
   const [flipVertical, setFlipVertical] = useState(false);
   const [trailLength, setTrailLength] = useState([4]);
@@ -232,6 +232,7 @@ export default function WandTracker() {
   const [learningProgress, setLearningProgress] = useState("");
   const [isLoadingSpells, setIsLoadingSpells] = useState(false);
   const [spellsEnabled, setSpellsEnabled] = useState(true);
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -919,8 +920,23 @@ export default function WandTracker() {
         )}
       </div>
 
+      {/* Mobile Control Toggle */}
+      <div className="md:hidden fixed bottom-4 right-4 z-40">
+        <Button
+          onClick={() => setMobileControlsOpen(!mobileControlsOpen)}
+          size="sm"
+          variant="outline"
+          className="rounded-full w-12 h-12 p-0 bg-card/90 backdrop-blur-sm"
+          data-testid="button-mobile-toggle"
+        >
+          {mobileControlsOpen ? "✕" : "⚙️"}
+        </Button>
+      </div>
+
       {/* Main Control Panel */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-30 w-full max-w-4xl px-4">
+      <div className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-30 w-full max-w-4xl px-4 transition-transform duration-300 ${
+        mobileControlsOpen ? 'translate-y-0' : 'md:translate-y-0 translate-y-full'
+      }`}>
         <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="tracker" className="flex items-center space-x-2" data-testid="tab-tracker">
