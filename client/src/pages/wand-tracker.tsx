@@ -231,6 +231,7 @@ export default function WandTracker() {
   const [learningStep, setLearningStep] = useState(0);
   const [learningProgress, setLearningProgress] = useState("");
   const [isLoadingSpells, setIsLoadingSpells] = useState(false);
+  const [spellsEnabled, setSpellsEnabled] = useState(true);
 
   // Load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -389,7 +390,7 @@ export default function WandTracker() {
     spellPointsRef.current.push([x, y]);
     
     // Check for spell recognition periodically
-    if (timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > 10) {
+    if (spellsEnabled && timestamp - lastSpellCheckRef.current > 500 && spellPointsRef.current.length > 10) {
       const recognized = recognizeSpellPattern(spellPointsRef.current);
       if (recognized && (!isLearningSpell || recognized !== currentSpellName)) {
         console.log(`🔮 Casting spell: ${recognized}`);
@@ -887,10 +888,22 @@ export default function WandTracker() {
       />
 
       {/* Status Indicators */}
-      <div className="status-indicators absolute top-4 left-4 right-4 z-10 flex flex-row justify-center space-x-3">
-        <StatusIndicator status={cameraStatus} label="Camera" />
-        <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Paused" : "Tracking"} />
-        <StatusIndicator status={wandStatus && !isPaused} label="Wand" />
+      <div className="status-indicators absolute top-4 left-4 right-4 z-10 flex flex-row justify-between items-center">
+        <div className="flex items-center space-x-2 bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
+          <Switch
+            checked={spellsEnabled}
+            onCheckedChange={setSpellsEnabled}
+            className="scale-75"
+            data-testid="switch-spells"
+          />
+          <span className="text-xs text-muted-foreground">Spells</span>
+        </div>
+        
+        <div className="flex space-x-3">
+          <StatusIndicator status={cameraStatus} label="Camera" />
+          <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Paused" : "Tracking"} />
+          <StatusIndicator status={wandStatus && !isPaused} label="Wand" />
+        </div>
         {debugMode && (
           <div className="bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
             <div className="text-xs text-muted-foreground space-y-1">
