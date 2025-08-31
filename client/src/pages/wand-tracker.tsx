@@ -62,7 +62,7 @@ class UnistrokeRecognizer {
     return bestMatch.score > 0 ? bestMatch : null;
   }
   
-  private normalizePoints(points: number[][]): number[][] {
+  normalizePoints(points: number[][]): number[][] {
     if (points.length === 0) return [];
     
     // Resample to fixed number of points
@@ -178,7 +178,7 @@ class UnistrokeRecognizer {
     return points.map(point => [point[0] - centroid[0], point[1] - centroid[1]]);
   }
   
-  private calculateSimilarity(points1: number[][], points2: number[][]): number {
+  calculateSimilarity(points1: number[][], points2: number[][]): number {
     let distance = 0;
     for (let i = 0; i < points1.length; i++) {
       distance += this.distance(points1[i], points2[i]);
@@ -424,14 +424,45 @@ export default function WandTracker() {
     }
   }, [learningStep, learnedSpells, showSpellDetection]);
   
+  // Check if patterns are similar enough
+  const checkPatternSimilarity = useCallback((patterns: number[][][]): boolean => {
+    if (patterns.length !== 3) return false;
+    
+    // Calculate similarity between each pair of patterns
+    const similarities: number[] = [];
+    for (let i = 0; i < patterns.length; i++) {
+      for (let j = i + 1; j < patterns.length; j++) {
+        const sim = recognizerRef.current.calculateSimilarity(
+          recognizerRef.current.normalizePoints(patterns[i]),
+          recognizerRef.current.normalizePoints(patterns[j])
+        );
+        similarities.push(sim);
+      }
+    }
+    
+    // All pairs should be at least 70% similar
+    const averageSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+    return averageSimilarity > 0.7;
+  }, []);
+
   // Complete spell learning after 3 patterns
   const completeSpellLearning = useCallback(() => {
     if (!currentSpellName.trim() || learningPatternsRef.current.length < 3) {
       return;
     }
     
-    // Use the first pattern as the template (could average them for better results)
     const spellName = currentSpellName.trim();
+    
+    // Check if the 3 patterns are similar enough
+    if (!checkPatternSimilarity(learningPatternsRef.current)) {
+      setLearningProgress("❌ Patterns too different. Try again with more consistent movements.");
+      setLearningStep(0);
+      learningPatternsRef.current = [];
+      spellPointsRef.current = [];
+      return;
+    }
+    
+    // Use the first pattern as the template
     const template = learningPatternsRef.current[0];
     
     const newSpells = { ...learnedSpells, [spellName]: template };
@@ -447,7 +478,38 @@ export default function WandTracker() {
     spellPointsRef.current = [];
     
     showSpellDetection(`✨ Learned: ${spellName}`);
-  }, [currentSpellName, learnedSpells, showSpellDetection]);
+  }, [currentSpellName, learnedSpells, showSpellDetection, checkPatternSimilarity]);
+
+  // Load Harry Potter spells
+  const loadHarryPotterSpells = useCallback(() => {
+    const harryPotterSpells = {
+      "Lumos": [[0, 0], [0, -50]], // Simple up stroke
+      "Nox": [[0, 0], [0, 50]], // Simple down stroke
+      "Accio": [[-50, 0], [50, 0]], // Pull toward gesture
+      "Expelliarmus": [[0, 0], [30, -20], [50, 10]], // Flick away
+      "Wingardium Leviosa": [[0, 0], [-20, -10], [20, -10], [0, 0]], // Swish and flick
+      "Stupefy": [[0, 0], [0, -40]], // Straight thrust
+      "Petrificus Totalus": [[0, 0], [30, 0], [0, 30], [-30, 0], [0, -30]], // Binding cross
+      "Alohomora": [[0, 0], [20, 0], [20, 20], [0, 20]], // Key turn motion
+      "Incendio": [[0, 0], [15, -15], [30, 0], [15, 15]], // Flame flick
+      "Aguamenti": [[0, 0], [-20, -10], [-10, 10], [20, -10], [10, 10]], // Water wave
+      "Expecto Patronum": [[0, 0], [30, 0], [21, 21], [0, 30], [-21, 21], [-30, 0], [-21, -21], [0, -30], [21, -21]], // Protective circle
+      "Riddikulus": [[0, 0], [20, -20], [-20, -20], [20, 20], [-20, 20]], // Laugh gesture
+      "Flipendo": [[0, 0], [40, 0]], // Push force
+      "Impedimenta": [[0, 0], [0, -30], [30, -30], [30, 0]], // Blocking wall
+      "Rictusempra": [[0, 0], [10, -10], [-10, -10], [10, 10], [-10, 10], [0, 0]] // Tickle wiggle
+    };
+
+    const newSpells = { ...learnedSpells, ...harryPotterSpells };
+    setLearnedSpells(newSpells);
+    
+    // Add all to recognizer
+    Object.entries(harryPotterSpells).forEach(([name, pattern]) => {
+      recognizerRef.current.addTemplate(name, pattern);
+    });
+    
+    showSpellDetection(`✨ Loaded ${Object.keys(harryPotterSpells).length} Harry Potter spells!`);
+  }, [learnedSpells, showSpellDetection]);
 
   // Draw trail
   const drawTrail = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -519,10 +581,7 @@ export default function WandTracker() {
         setWandPosition({ x, y, visible: true });
         setWandStatus(true);
         
-        // Handle spell learning with multiple patterns
-        if (isLearningSpell && spellPointsRef.current.length > 15) {
-          finishLearningPattern();
-        }
+        // Store spell points for learning (removed automatic pattern capture)
       } else {
         setWandStatus(false);
       }
@@ -890,11 +949,29 @@ export default function WandTracker() {
                       </Button>
                     </div>
                     
+                    {/* Capture Pattern Button */}
+                    {isLearningSpell && (
+                      <Button
+                        onClick={() => {
+                          if (spellPointsRef.current.length < 5) {
+                            setLearningProgress("❌ Pattern too short. Draw a longer movement and try again.");
+                            return;
+                          }
+                          finishLearningPattern();
+                        }}
+                        disabled={spellPointsRef.current.length < 5}
+                        className="w-full"
+                        data-testid="button-capture-pattern"
+                      >
+                        Capture Pattern {learningStep + 1}/3
+                      </Button>
+                    )}
+                    
                     <div className="text-sm text-muted-foreground">
                       {isLearningSpell ? (
                         <div className="space-y-1">
                           <div className="font-medium text-accent">🔮 Learning Mode Active</div>
-                          <div>{learningProgress || `Draw pattern ${learningStep + 1}/3`}</div>
+                          <div>{learningProgress || `Draw pattern ${learningStep + 1}/3, then click 'Capture Pattern'`}</div>
                         </div>
                       ) : (
                         <div>{Object.keys(learnedSpells).length} spells learned</div>
@@ -925,6 +1002,28 @@ export default function WandTracker() {
                         </div>
                       </div>
                     )}
+                  </CardContent>
+                </Card>
+
+                {/* Harry Potter Spells */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center space-x-2">
+                      <Wand2 className="w-5 h-5" />
+                      <span>Harry Potter Spells</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm text-muted-foreground mb-4">
+                      Load 15 classic Harry Potter spells with their traditional wand movements.
+                    </div>
+                    <Button
+                      onClick={loadHarryPotterSpells}
+                      className="w-full"
+                      data-testid="button-load-hp-spells"
+                    >
+                      Activate Harry Potter Spells
+                    </Button>
                   </CardContent>
                 </Card>
 

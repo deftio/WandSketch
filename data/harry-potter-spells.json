@@ -1,0 +1,94 @@
+{
+  "spells": [
+    {
+      "name": "Lumos",
+      "description": "Wand-Lighting charm that makes your wand glow",
+      "type": "Charm",
+      "pattern": "simple_up"
+    },
+    {
+      "name": "Nox", 
+      "description": "Extinguishes the light at the end of your wand",
+      "type": "Charm",
+      "pattern": "simple_down"
+    },
+    {
+      "name": "Accio",
+      "description": "Summoning Charm - summons objects towards the caster",
+      "type": "Charm", 
+      "pattern": "pull_toward"
+    },
+    {
+      "name": "Expelliarmus",
+      "description": "Disarming Charm - knocks another wizard's wand out of their hand",
+      "type": "Charm",
+      "pattern": "flick_away"
+    },
+    {
+      "name": "Wingardium Leviosa",
+      "description": "Levitation charm - makes objects float",
+      "type": "Charm",
+      "pattern": "swish_and_flick"
+    },
+    {
+      "name": "Stupefy",
+      "description": "Stunning Spell - renders target unconscious",
+      "type": "Jinx",
+      "pattern": "straight_thrust"
+    },
+    {
+      "name": "Petrificus Totalus",
+      "description": "Body-Bind Curse - locks person's limbs so they cannot move",
+      "type": "Curse",
+      "pattern": "binding_cross"
+    },
+    {
+      "name": "Alohomora",
+      "description": "Unlocking Charm - opens locked doors",
+      "type": "Charm",
+      "pattern": "key_turn"
+    },
+    {
+      "name": "Incendio",
+      "description": "Fire-Making Spell - creates fire",
+      "type": "Charm",
+      "pattern": "flame_flick"
+    },
+    {
+      "name": "Aguamenti",
+      "description": "Water-Making Spell - produces clean, drinkable water",
+      "type": "Charm",
+      "pattern": "water_wave"
+    },
+    {
+      "name": "Expecto Patronum",
+      "description": "Patronus Charm - creates protective guardian against Dementors",
+      "type": "Charm",
+      "pattern": "protective_circle"
+    },
+    {
+      "name": "Riddikulus",
+      "description": "Boggart-Banishing Charm - makes Boggarts take comical form",
+      "type": "Charm",
+      "pattern": "laugh_gesture"
+    },
+    {
+      "name": "Flipendo",
+      "description": "Knockback Jinx - high damage aggressive spell",
+      "type": "Jinx",
+      "pattern": "push_force"
+    },
+    {
+      "name": "Impedimenta",
+      "description": "Slowing/obstruction spell",
+      "type": "Jinx",
+      "pattern": "blocking_wall"
+    },
+    {
+      "name": "Rictusempra",
+      "description": "Tickling Charm - overwhelms target with tickling sensation",
+      "type": "Charm",
+      "pattern": "tickle_wiggle"
+    }
+  ]
+}
