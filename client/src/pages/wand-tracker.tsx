@@ -195,6 +195,7 @@ declare global {
 }
 
 export default function WandTracker() {
+  // Build timestamp: ${new Date().toISOString()}
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const animationRef = useRef<number>();
@@ -234,6 +235,7 @@ export default function WandTracker() {
   const [spellsEnabled, setSpellsEnabled] = useState(true);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [spellWindow, setSpellWindow] = useState([20]); // Number of points to analyze for spells
+  const BUILD_VERSION = "v2024090207";
   const spellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load settings from localStorage
