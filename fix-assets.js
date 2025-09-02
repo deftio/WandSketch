@@ -25,10 +25,10 @@ if (cssFiles.length > 0) {
     path.join(assetsDir, newCssName)
   );
   
-  // Update HTML reference
+  // Update HTML reference (use relative paths)
   html = html.replace(
-    new RegExp(`/assets/${oldCssName}`, 'g'),
-    `/assets/${newCssName}`
+    new RegExp(`[/]?assets/${oldCssName}`, 'g'),
+    `assets/${newCssName}`
   );
   
   console.log(`✅ Renamed ${oldCssName} → ${newCssName}`);
@@ -46,10 +46,10 @@ if (jsFiles.length > 0) {
     path.join(assetsDir, newJsName)
   );
   
-  // Update HTML reference
+  // Update HTML reference (use relative paths)
   html = html.replace(
-    new RegExp(`/assets/${oldJsName}`, 'g'),
-    `/assets/${newJsName}`
+    new RegExp(`[/]?assets/${oldJsName}`, 'g'),
+    `assets/${newJsName}`
   );
   
   console.log(`✅ Renamed ${oldJsName} → ${newJsName}`);
