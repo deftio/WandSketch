@@ -397,7 +397,7 @@ export default function WandTracker() {
     spellPointsRef.current.push([x, y]);
     
     // Check for spell recognition periodically (without interrupting tracking)
-    if (spellsEnabled && timestamp - lastSpellCheckRef.current > 1000 && spellPointsRef.current.length > spellWindow[0]) {
+    if (spellsEnabled && !isPaused && timestamp - lastSpellCheckRef.current > 1000 && spellPointsRef.current.length > spellWindow[0]) {
       try {
         // Use a copy for recognition so we don't interrupt tracking
         const recentPoints = spellPointsRef.current.slice(-spellWindow[0]);
@@ -432,12 +432,14 @@ export default function WandTracker() {
       spellPointsRef.current = spellPointsRef.current.slice(-spellWindow[0] * 2);
     }
 
-    // Remove old trail points
-    const currentTime = Date.now();
-    const trailLengthMs = trailLength[0] * 1000;
-    trailPointsRef.current = trailPointsRef.current.filter(point => 
-      point.update(currentTime, trailLengthMs)
-    );
+    // Remove old trail points (only if not paused)
+    if (!isPaused) {
+      const currentTime = Date.now();
+      const trailLengthMs = trailLength[0] * 1000;
+      trailPointsRef.current = trailPointsRef.current.filter(point => 
+        point.update(currentTime, trailLengthMs)
+      );
+    }
   }, [smoothing, trailLength, isLearningSpell, currentSpellName]);
   
   // Finish learning a single pattern
@@ -1022,15 +1024,9 @@ export default function WandTracker() {
 
           <TabsContent value="tracker">
             <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
-              <div className="flex justify-center">
-                <Button
-                  onClick={clearCanvas}
-                  className="flex items-center space-x-2"
-                  data-testid="button-clear-canvas"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Clear Trail</span>
-                </Button>
+              <div className="text-center text-muted-foreground">
+                <p>Use the top controls to pause/resume tracking.</p>
+                <p>Adjust settings in the Settings tab.</p>
               </div>
             </div>
           </TabsContent>
@@ -1301,6 +1297,18 @@ export default function WandTracker() {
                           data-testid="slider-spell-window"
                         />
                         <span className="text-sm text-foreground w-8">{spellWindow[0]}</span>
+                      </div>
+                      
+                      <div className="pt-2 border-t">
+                        <Button
+                          onClick={clearCanvas}
+                          variant="outline"
+                          className="flex items-center space-x-2 w-full"
+                          data-testid="button-clear-canvas"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Clear Trail</span>
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
