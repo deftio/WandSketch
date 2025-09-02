@@ -1022,77 +1022,15 @@ export default function WandTracker() {
 
           <TabsContent value="tracker">
             <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
-              <div className="space-y-4">
-                {/* Clear Button */}
-                <div className="flex justify-center">
-                  <Button
-                    onClick={clearCanvas}
-                    className="flex items-center space-x-2"
-                    data-testid="button-clear-canvas"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Clear Trail</span>
-                  </Button>
-                </div>
-
-                {/* Trail and Detection Controls */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">Trail:</label>
-                    <Slider
-                      value={trailLength}
-                      onValueChange={setTrailLength}
-                      min={1}
-                      max={20}
-                      step={1}
-                      className="flex-1 min-w-0"
-                      data-testid="slider-trail-length"
-                    />
-                    <span className="text-sm text-foreground w-6">{trailLength[0]}s</span>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">Sensitivity:</label>
-                    <Slider
-                      value={sensitivity}
-                      onValueChange={setSensitivity}
-                      min={0.1}
-                      max={1}
-                      step={0.1}
-                      className="flex-1 min-w-0"
-                      data-testid="slider-sensitivity"
-                    />
-                    <span className="text-sm text-foreground w-8">{sensitivity[0]}</span>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">Smooth:</label>
-                    <Slider
-                      value={smoothing}
-                      onValueChange={setSmoothing}
-                      min={1}
-                      max={10}
-                      step={1}
-                      className="flex-1 min-w-0"
-                      data-testid="slider-smoothing"
-                    />
-                    <span className="text-sm text-foreground w-4">{smoothing[0]}</span>
-                  </div>
-
-                  <div className="flex items-center space-x-2" title="How many recent movement points to analyze for spell recognition. Lower = more responsive, Higher = more stable">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">Spell Memory:</label>
-                    <Slider
-                      value={spellWindow}
-                      onValueChange={setSpellWindow}
-                      min={10}
-                      max={50}
-                      step={5}
-                      className="flex-1 min-w-0"
-                      data-testid="slider-spell-window"
-                    />
-                    <span className="text-sm text-foreground w-6">{spellWindow[0]}</span>
-                  </div>
-                </div>
+              <div className="flex justify-center">
+                <Button
+                  onClick={clearCanvas}
+                  className="flex items-center space-x-2"
+                  data-testid="button-clear-canvas"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Clear Trail</span>
+                </Button>
               </div>
             </div>
           </TabsContent>
@@ -1295,6 +1233,75 @@ export default function WandTracker() {
                         onCheckedChange={setFlipVertical}
                         data-testid="switch-flip-vertical"
                       />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Tracking Settings */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center space-x-2">
+                      <Wand2 className="w-5 h-5" />
+                      <span>Tracking Settings</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <label className="text-sm text-muted-foreground whitespace-nowrap min-w-16">Trail:</label>
+                        <Slider
+                          value={trailLength}
+                          onValueChange={setTrailLength}
+                          min={1}
+                          max={20}
+                          step={1}
+                          className="flex-1 min-w-0"
+                          data-testid="slider-trail-length"
+                        />
+                        <span className="text-sm text-foreground w-8">{trailLength[0]}s</span>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <label className="text-sm text-muted-foreground whitespace-nowrap min-w-16">Sensitivity:</label>
+                        <Slider
+                          value={sensitivity}
+                          onValueChange={setSensitivity}
+                          min={0.1}
+                          max={1}
+                          step={0.1}
+                          className="flex-1 min-w-0"
+                          data-testid="slider-sensitivity"
+                        />
+                        <span className="text-sm text-foreground w-8">{sensitivity[0]}</span>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <label className="text-sm text-muted-foreground whitespace-nowrap min-w-16">Smooth:</label>
+                        <Slider
+                          value={smoothing}
+                          onValueChange={setSmoothing}
+                          min={1}
+                          max={10}
+                          step={1}
+                          className="flex-1 min-w-0"
+                          data-testid="slider-smoothing"
+                        />
+                        <span className="text-sm text-foreground w-8">{smoothing[0]}</span>
+                      </div>
+
+                      <div className="flex items-center space-x-2" title="How many recent movement points to analyze for spell recognition. Lower = more responsive, Higher = more stable">
+                        <label className="text-sm text-muted-foreground whitespace-nowrap min-w-16">Spell Memory Length:</label>
+                        <Slider
+                          value={spellWindow}
+                          onValueChange={setSpellWindow}
+                          min={10}
+                          max={50}
+                          step={5}
+                          className="flex-1 min-w-0"
+                          data-testid="slider-spell-window"
+                        />
+                        <span className="text-sm text-foreground w-8">{spellWindow[0]}</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
