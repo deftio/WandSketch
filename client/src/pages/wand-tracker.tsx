@@ -217,7 +217,7 @@ export default function WandTracker() {
   const [isVideoVisible, setIsVideoVisible] = useState(false);
   const [flipHorizontal, setFlipHorizontal] = useState(true);
   const [flipVertical, setFlipVertical] = useState(false);
-  const [trailLength, setTrailLength] = useState([4]);
+  const [trailLength, setTrailLength] = useState([6]);
   const [sensitivity, setSensitivity] = useState([0.8]);
   const [smoothing, setSmoothing] = useState([3]);
   const [isPaused, setIsPaused] = useState(false);
@@ -247,7 +247,7 @@ export default function WandTracker() {
         setIsVideoVisible(settings.isVideoVisible ?? false);
         setFlipHorizontal(settings.flipHorizontal ?? true);
         setFlipVertical(settings.flipVertical ?? false);
-        setTrailLength([settings.trailLength ?? 4]);
+        setTrailLength([settings.trailLength ?? 6]);
         setSensitivity([settings.sensitivity ?? 0.8]);
         setSmoothing([settings.smoothing ?? 3]);
         setIsPaused(settings.isPaused ?? false);
@@ -948,10 +948,29 @@ export default function WandTracker() {
           <span className="text-xs text-muted-foreground">Spells</span>
         </div>
         
-        <div className="flex space-x-3">
+        <div className="flex space-x-3 items-center">
           <StatusIndicator status={cameraStatus} label="Camera" />
           <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Paused" : "Tracking"} />
           <StatusIndicator status={wandStatus && !isPaused} label="Wand" />
+          <Button
+            onClick={() => setIsPaused(!isPaused)}
+            variant={isPaused ? "default" : "secondary"}
+            size="sm"
+            className="flex items-center space-x-1 h-8"
+            data-testid="button-pause-scanning-top"
+          >
+            {isPaused ? (
+              <>
+                <Play className="w-3 h-3" />
+                <span className="hidden sm:inline text-xs">Resume</span>
+              </>
+            ) : (
+              <>
+                <Pause className="w-3 h-3" />
+                <span className="hidden sm:inline text-xs">Pause</span>
+              </>
+            )}
+          </Button>
         </div>
         {debugMode && (
           <div className="bg-card/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border">
@@ -1004,38 +1023,19 @@ export default function WandTracker() {
           <TabsContent value="tracker">
             <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
               <div className="space-y-4">
-                {/* First Row - Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                {/* Clear Button */}
+                <div className="flex justify-center">
                   <Button
                     onClick={clearCanvas}
-                    className="flex items-center space-x-2 w-full sm:w-auto"
+                    className="flex items-center space-x-2"
                     data-testid="button-clear-canvas"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Clear Trail</span>
                   </Button>
-
-                  <Button
-                    onClick={() => setIsPaused(!isPaused)}
-                    variant={isPaused ? "default" : "secondary"}
-                    className="flex items-center space-x-2 w-full sm:w-auto"
-                    data-testid="button-pause-scanning"
-                  >
-                    {isPaused ? (
-                      <>
-                        <Play className="w-4 h-4" />
-                        <span>Resume</span>
-                      </>
-                    ) : (
-                      <>
-                        <Pause className="w-4 h-4" />
-                        <span>Pause</span>
-                      </>
-                    )}
-                  </Button>
                 </div>
 
-                {/* Second Row - Trail and Detection Controls */}
+                {/* Trail and Detection Controls */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="flex items-center space-x-2">
                     <label className="text-sm text-muted-foreground whitespace-nowrap">Trail:</label>
@@ -1043,7 +1043,7 @@ export default function WandTracker() {
                       value={trailLength}
                       onValueChange={setTrailLength}
                       min={1}
-                      max={8}
+                      max={20}
                       step={1}
                       className="flex-1 min-w-0"
                       data-testid="slider-trail-length"
@@ -1079,8 +1079,8 @@ export default function WandTracker() {
                     <span className="text-sm text-foreground w-4">{smoothing[0]}</span>
                   </div>
 
-                  <div className="flex items-center space-x-2" title="Number of recent tracking points analyzed for spell recognition">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">Spell Pattern:</label>
+                  <div className="flex items-center space-x-2" title="How many recent movement points to analyze for spell recognition. Lower = more responsive, Higher = more stable">
+                    <label className="text-sm text-muted-foreground whitespace-nowrap">Spell Memory:</label>
                     <Slider
                       value={spellWindow}
                       onValueChange={setSpellWindow}
