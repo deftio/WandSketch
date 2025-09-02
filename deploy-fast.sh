@@ -21,5 +21,9 @@ echo "  - JS:   $(ls -la dist/public/assets/*.js | awk '{print $5}') bytes"
 echo "  - Favicon: $(ls -la dist/public/favicon.svg | awk '{print $5}') bytes"
 
 echo ""
-echo "✅ Ready for git commit and push!"
+echo "📁 Copying files to repository root for GitHub Pages..."
+cp -r dist/public/* .
+
+echo "✅ Files copied to root - GitHub Pages can now find them!"
+echo "📋 Ready for git commit and push!"
 echo "💡 This should deploy in under 2 minutes with the new workflow."
