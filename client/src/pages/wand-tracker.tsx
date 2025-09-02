@@ -232,7 +232,7 @@ export default function WandTracker() {
   const [learningStep, setLearningStep] = useState(0);
   const [learningProgress, setLearningProgress] = useState("");
   const [isLoadingSpells, setIsLoadingSpells] = useState(false);
-  const [spellsEnabled, setSpellsEnabled] = useState(true);
+  const [spellsEnabled, setSpellsEnabled] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [spellWindow, setSpellWindow] = useState([20]); // Number of points to analyze for spells
   const BUILD_VERSION = "v2024090207";
@@ -244,13 +244,14 @@ export default function WandTracker() {
       const savedSettings = localStorage.getItem('wandTracker-settings');
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        setIsVideoVisible(settings.isVideoVisible ?? true);
+        setIsVideoVisible(settings.isVideoVisible ?? false);
         setFlipHorizontal(settings.flipHorizontal ?? true);
         setFlipVertical(settings.flipVertical ?? false);
         setTrailLength([settings.trailLength ?? 4]);
         setSensitivity([settings.sensitivity ?? 0.8]);
         setSmoothing([settings.smoothing ?? 3]);
         setIsPaused(settings.isPaused ?? false);
+        setSpellsEnabled(settings.spellsEnabled ?? false);
       }
       
       const savedSpells = localStorage.getItem('wandTracker-spells');
@@ -277,7 +278,8 @@ export default function WandTracker() {
         trailLength: trailLength[0],
         sensitivity: sensitivity[0],
         smoothing: smoothing[0],
-        isPaused
+        isPaused,
+        spellsEnabled
       };
       localStorage.setItem('wandTracker-settings', JSON.stringify(settings));
       localStorage.setItem('wandTracker-spells', JSON.stringify(learnedSpells));
@@ -1001,89 +1003,95 @@ export default function WandTracker() {
 
           <TabsContent value="tracker">
             <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
-              <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4">
-                <Button
-                  onClick={clearCanvas}
-                  className="flex items-center space-x-2 w-full sm:w-auto"
-                  data-testid="button-clear-canvas"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Clear Trail</span>
-                </Button>
+              <div className="space-y-4">
+                {/* First Row - Action Buttons */}
+                <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                  <Button
+                    onClick={clearCanvas}
+                    className="flex items-center space-x-2 w-full sm:w-auto"
+                    data-testid="button-clear-canvas"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Clear Trail</span>
+                  </Button>
 
-                <Button
-                  onClick={() => setIsPaused(!isPaused)}
-                  variant={isPaused ? "default" : "secondary"}
-                  className="flex items-center space-x-2 w-full sm:w-auto"
-                  data-testid="button-pause-scanning"
-                >
-                  {isPaused ? (
-                    <>
-                      <Play className="w-4 h-4" />
-                      <span>Resume</span>
-                    </>
-                  ) : (
-                    <>
-                      <Pause className="w-4 h-4" />
-                      <span>Pause</span>
-                    </>
-                  )}
-                </Button>
-
-                <div className="flex items-center space-x-2 w-full sm:w-auto">
-                  <label className="text-sm text-muted-foreground whitespace-nowrap">Trail:</label>
-                  <Slider
-                    value={trailLength}
-                    onValueChange={setTrailLength}
-                    min={1}
-                    max={8}
-                    step={1}
-                    className="w-20"
-                    data-testid="slider-trail-length"
-                  />
-                  <span className="text-sm text-foreground w-6">{trailLength[0]}s</span>
+                  <Button
+                    onClick={() => setIsPaused(!isPaused)}
+                    variant={isPaused ? "default" : "secondary"}
+                    className="flex items-center space-x-2 w-full sm:w-auto"
+                    data-testid="button-pause-scanning"
+                  >
+                    {isPaused ? (
+                      <>
+                        <Play className="w-4 h-4" />
+                        <span>Resume</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="w-4 h-4" />
+                        <span>Pause</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
 
-                <div className="flex items-center space-x-2 w-full sm:w-auto">
-                  <label className="text-sm text-muted-foreground whitespace-nowrap">Sensitivity:</label>
-                  <Slider
-                    value={sensitivity}
-                    onValueChange={setSensitivity}
-                    min={0.1}
-                    max={1}
-                    step={0.1}
-                    className="w-20"
-                    data-testid="slider-sensitivity"
-                  />
-                  <span className="text-sm text-foreground w-8">{sensitivity[0]}</span>
-                </div>
+                {/* Second Row - Trail and Detection Controls */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-muted-foreground whitespace-nowrap">Trail:</label>
+                    <Slider
+                      value={trailLength}
+                      onValueChange={setTrailLength}
+                      min={1}
+                      max={8}
+                      step={1}
+                      className="flex-1 min-w-0"
+                      data-testid="slider-trail-length"
+                    />
+                    <span className="text-sm text-foreground w-6">{trailLength[0]}s</span>
+                  </div>
 
-                <div className="flex items-center space-x-2 w-full sm:w-auto">
-                  <label className="text-sm text-muted-foreground whitespace-nowrap">Smooth:</label>
-                  <Slider
-                    value={smoothing}
-                    onValueChange={setSmoothing}
-                    min={1}
-                    max={10}
-                    step={1}
-                    className="w-16"
-                    data-testid="slider-smoothing"
-                  />
-                  <span className="text-sm text-foreground w-4">{smoothing[0]}</span>
-                </div>
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-muted-foreground whitespace-nowrap">Sensitivity:</label>
+                    <Slider
+                      value={sensitivity}
+                      onValueChange={setSensitivity}
+                      min={0.1}
+                      max={1}
+                      step={0.1}
+                      className="flex-1 min-w-0"
+                      data-testid="slider-sensitivity"
+                    />
+                    <span className="text-sm text-foreground w-8">{sensitivity[0]}</span>
+                  </div>
 
-                <div className="flex items-center space-x-2 w-full sm:w-auto">
-                  <label className="text-sm text-muted-foreground whitespace-nowrap">Spell Window:</label>
-                  <Slider
-                    value={spellWindow}
-                    onValueChange={setSpellWindow}
-                    min={10}
-                    max={50}
-                    step={5}
-                    className="w-20"
-                    data-testid="slider-spell-window"
-                  />
-                  <span className="text-sm text-foreground w-6">{spellWindow[0]}</span>
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-muted-foreground whitespace-nowrap">Smooth:</label>
+                    <Slider
+                      value={smoothing}
+                      onValueChange={setSmoothing}
+                      min={1}
+                      max={10}
+                      step={1}
+                      className="flex-1 min-w-0"
+                      data-testid="slider-smoothing"
+                    />
+                    <span className="text-sm text-foreground w-4">{smoothing[0]}</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2" title="Number of recent tracking points analyzed for spell recognition">
+                    <label className="text-sm text-muted-foreground whitespace-nowrap">Spell Pattern:</label>
+                    <Slider
+                      value={spellWindow}
+                      onValueChange={setSpellWindow}
+                      min={10}
+                      max={50}
+                      step={5}
+                      className="flex-1 min-w-0"
+                      data-testid="slider-spell-window"
+                    />
+                    <span className="text-sm text-foreground w-6">{spellWindow[0]}</span>
+                  </div>
                 </div>
               </div>
             </div>
