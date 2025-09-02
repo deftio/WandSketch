@@ -441,7 +441,7 @@ export default function WandTracker() {
         point.update(currentTime, trailLengthMs)
       );
     }
-  }, [smoothing, trailLength, isLearningSpell, currentSpellName]);
+  }, [smoothing, trailLength, isLearningSpell, currentSpellName, spellsEnabled, isPaused, spellWindow]);
   
   // Finish learning a single pattern
   const finishLearningPattern = useCallback(() => {
