@@ -236,6 +236,7 @@ export default function WandTracker() {
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [spellWindow, setSpellWindow] = useState([20]); // Number of points to analyze for spells
   const BUILD_VERSION = "v2024090207";
+  const APP_TITLE = "Spell Caster";
   const spellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load settings from localStorage
@@ -951,7 +952,7 @@ export default function WandTracker() {
         </div>
         
         <div className="text-2xl font-light text-muted-foreground/70">
-          Spell Caster
+          {APP_TITLE}
         </div>
         
         <div className="flex space-x-3 items-center">
@@ -1327,9 +1328,13 @@ export default function WandTracker() {
                 <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Camera className="w-8 h-8 text-primary" />
                 </div>
-                <h2 className="text-xl font-semibold text-foreground mb-2">Camera Access Required</h2>
-                <p className="text-muted-foreground mb-6">
+                <h1 className="text-2xl font-bold text-foreground mb-2">{APP_TITLE}</h1>
+                <h2 className="text-lg font-semibold text-foreground mb-3">Camera Access Required</h2>
+                <p className="text-muted-foreground mb-3">
                   This app needs access to your camera to track wand movements and create magical drawings.
+                </p>
+                <p className="text-sm text-muted-foreground/80 mb-6">
+                  🔒 Your privacy is protected: All video processing happens locally in your browser. No videos or images are sent to any server.
                 </p>
                 <Button
                   onClick={enableCamera}
