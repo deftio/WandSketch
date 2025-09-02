@@ -235,6 +235,9 @@ export default function WandTracker() {
   const [spellsEnabled, setSpellsEnabled] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [spellWindow, setSpellWindow] = useState([20]); // Number of points to analyze for spells
+  const [spellDisplayTime, setSpellDisplayTime] = useState([2000]); // How long to show spell and wait before next recognition
+  const [showSpellGuide, setShowSpellGuide] = useState(false);
+  const [simpleSpellLearning, setSimpleSpellLearning] = useState(false);
   const BUILD_VERSION = "v2024090207";
   const APP_TITLE = "Spell Caster";
   const spellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -253,6 +256,9 @@ export default function WandTracker() {
         setSmoothing([settings.smoothing ?? 3]);
         setIsPaused(settings.isPaused ?? false);
         setSpellsEnabled(settings.spellsEnabled ?? false);
+        setSpellWindow([settings.spellWindow ?? 20]);
+        setSpellDisplayTime([settings.spellDisplayTime ?? 2000]);
+        setSimpleSpellLearning(settings.simpleSpellLearning ?? false);
       }
       
       const savedSpells = localStorage.getItem('wandTracker-spells');
@@ -280,14 +286,17 @@ export default function WandTracker() {
         sensitivity: sensitivity[0],
         smoothing: smoothing[0],
         isPaused,
-        spellsEnabled
+        spellsEnabled,
+        spellWindow: spellWindow[0],
+        spellDisplayTime: spellDisplayTime[0],
+        simpleSpellLearning
       };
       localStorage.setItem('wandTracker-settings', JSON.stringify(settings));
       localStorage.setItem('wandTracker-spells', JSON.stringify(learnedSpells));
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
-  }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, smoothing, isPaused, learnedSpells]);
+  }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, smoothing, isPaused, learnedSpells, spellWindow, spellDisplayTime, simpleSpellLearning]);
   
   // Load MediaPipe scripts
   const loadMediaPipeScripts = useCallback(() => {
@@ -416,10 +425,10 @@ export default function WandTracker() {
           spellTimeoutRef.current = setTimeout(() => {
             setDetectedSpell("");
             spellTimeoutRef.current = null;
-          }, 2000);
+          }, spellDisplayTime[0]);
           
-          // Pause recognition for 2 seconds after detection
-          lastSpellCheckRef.current = timestamp + 2000;
+          // Pause recognition after detection
+          lastSpellCheckRef.current = timestamp + spellDisplayTime[0];
         }
         lastSpellCheckRef.current = timestamp;
       } catch (error) {
@@ -453,13 +462,15 @@ export default function WandTracker() {
     const nextStep = learningStep + 1;
     setLearningStep(nextStep);
     
-    if (nextStep < 3) {
-      setLearningProgress(`Pattern ${nextStep}/3 learned. Draw it ${3 - nextStep} more time${3 - nextStep === 1 ? '' : 's'}.`);
+    const requiredPatterns = simpleSpellLearning ? 1 : 3;
+    if (nextStep < requiredPatterns) {
+      const remaining = requiredPatterns - nextStep;
+      setLearningProgress(`Pattern ${nextStep}/${requiredPatterns} learned. Draw it ${remaining} more time${remaining === 1 ? '' : 's'}.`);
     } else {
       // Learn spell with averaged pattern
       completeSpellLearning();
     }
-  }, [learningStep, learnedSpells, showSpellDetection]);
+  }, [learningStep, learnedSpells, showSpellDetection, simpleSpellLearning]);
   
   // Check if patterns are similar enough
   const checkPatternSimilarity = useCallback((patterns: number[][][]): boolean => {
@@ -482,21 +493,25 @@ export default function WandTracker() {
     return averageSimilarity > 0.7;
   }, []);
 
-  // Complete spell learning after 3 patterns
+  // Complete spell learning after patterns
   const completeSpellLearning = useCallback(() => {
-    if (!currentSpellName.trim() || learningPatternsRef.current.length < 3) {
+    const requiredPatterns = simpleSpellLearning ? 1 : 3;
+    if (!currentSpellName.trim() || learningPatternsRef.current.length < requiredPatterns) {
       return;
     }
     
     const spellName = currentSpellName.trim();
     
-    // Check if the 3 patterns are similar enough
-    if (!checkPatternSimilarity(learningPatternsRef.current)) {
-      setLearningProgress("❌ Patterns too different. Try again with more consistent movements.");
-      setLearningStep(0);
-      learningPatternsRef.current = [];
-      spellPointsRef.current = [];
-      return;
+    // For simple learning, skip similarity check
+    if (!simpleSpellLearning) {
+      // Check if the 3 patterns are similar enough
+      if (!checkPatternSimilarity(learningPatternsRef.current)) {
+        setLearningProgress("❌ Patterns too different. Try again with more consistent movements.");
+        setLearningStep(0);
+        learningPatternsRef.current = [];
+        spellPointsRef.current = [];
+        return;
+      }
     }
     
     // Use the first pattern as the template
@@ -520,7 +535,7 @@ export default function WandTracker() {
     setTimeout(() => {
       setDetectedSpell("");
     }, 3000);
-  }, [currentSpellName, learnedSpells, checkPatternSimilarity]);
+  }, [currentSpellName, learnedSpells, checkPatternSimilarity, simpleSpellLearning]);
 
   // Load Harry Potter spells
   const loadHarryPotterSpells = useCallback(() => {
@@ -605,27 +620,88 @@ export default function WandTracker() {
     }
   }, [learnedSpells]);
 
-  // Normalize pattern to standard size and position
+  // Advanced pattern normalization for better recognition
   const normalizePattern = useCallback((pattern: number[][]) => {
     if (pattern.length === 0) return [];
     
-    // Find bounds
-    const xs = pattern.map(p => p[0]);
-    const ys = pattern.map(p => p[1]);
+    // 1. Resample to fixed number of points (32) for consistent comparison
+    const resampledPattern = resamplePattern(pattern, 32);
+    
+    // 2. Find centroid and bounds
+    const xs = resampledPattern.map(p => p[0]);
+    const ys = resampledPattern.map(p => p[1]);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
     
+    // 3. Scale to unit square (100x100) maintaining aspect ratio
     const width = maxX - minX || 1;
     const height = maxY - minY || 1;
-    const scale = Math.max(width, height) || 1;
+    const scale = Math.max(width, height);
     
-    // Normalize to 0-100 range
-    return pattern.map(([x, y]) => [
-      ((x - minX) / scale) * 100,
-      ((y - minY) / scale) * 100
+    // 4. Translate to origin and scale
+    const normalized = resampledPattern.map(([x, y]) => [
+      ((x - centerX) / scale) * 100,
+      ((y - centerY) / scale) * 100
     ]);
+    
+    return normalized;
+  }, []);
+  
+  // Resample pattern to fixed number of points
+  const resamplePattern = useCallback((pattern: number[][], numPoints: number) => {
+    if (pattern.length <= numPoints) return pattern;
+    
+    const totalLength = getTotalPathLength(pattern);
+    const segmentLength = totalLength / (numPoints - 1);
+    const resampled = [pattern[0]];
+    
+    let currentDistance = 0;
+    for (let i = 1; i < pattern.length; i++) {
+      const prevPoint = pattern[i - 1];
+      const currentPoint = pattern[i];
+      const segmentDist = getDistance(prevPoint, currentPoint);
+      
+      if (currentDistance + segmentDist >= segmentLength) {
+        const ratio = (segmentLength - currentDistance) / segmentDist;
+        const newPoint = [
+          prevPoint[0] + ratio * (currentPoint[0] - prevPoint[0]),
+          prevPoint[1] + ratio * (currentPoint[1] - prevPoint[1])
+        ];
+        resampled.push(newPoint);
+        
+        if (resampled.length >= numPoints) break;
+        currentDistance = 0;
+      } else {
+        currentDistance += segmentDist;
+      }
+    }
+    
+    // Ensure we have exactly numPoints
+    while (resampled.length < numPoints) {
+      resampled.push(pattern[pattern.length - 1]);
+    }
+    
+    return resampled.slice(0, numPoints);
+  }, []);
+  
+  // Calculate total path length
+  const getTotalPathLength = useCallback((pattern: number[][]) => {
+    let totalLength = 0;
+    for (let i = 1; i < pattern.length; i++) {
+      totalLength += getDistance(pattern[i - 1], pattern[i]);
+    }
+    return totalLength;
+  }, []);
+  
+  // Calculate distance between two points
+  const getDistance = useCallback((p1: number[], p2: number[]) => {
+    const dx = p1[0] - p2[0];
+    const dy = p1[1] - p2[1];
+    return Math.sqrt(dx * dx + dy * dy);
   }, []);
 
   // Calculate distance between two normalized patterns
@@ -1042,6 +1118,20 @@ export default function WandTracker() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <input
+                        type="checkbox"
+                        id="simple-learning"
+                        checked={simpleSpellLearning}
+                        onChange={(e) => setSimpleSpellLearning(e.target.checked)}
+                        className="rounded"
+                        data-testid="checkbox-simple-learning"
+                      />
+                      <label htmlFor="simple-learning" className="text-sm text-muted-foreground">
+                        Quick Learn (1 pattern instead of 3)
+                      </label>
+                    </div>
+                    
                     <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                       <Input
                         placeholder="Spell name (e.g., Lumos)"
@@ -1100,7 +1190,7 @@ export default function WandTracker() {
                       {isLearningSpell ? (
                         <div className="space-y-1">
                           <div className="font-medium text-accent">🔮 Learning Mode Active</div>
-                          <div>{learningProgress || `Draw pattern ${learningStep + 1}/3, then click 'Capture Pattern'`}</div>
+                          <div>{learningProgress || `Draw pattern ${learningStep + 1}/${simpleSpellLearning ? 1 : 3}, then click 'Capture Pattern'`}</div>
                         </div>
                       ) : (
                         <div>{Object.keys(learnedSpells).length} spells learned</div>
@@ -1146,13 +1236,25 @@ export default function WandTracker() {
                     <div className="text-sm text-muted-foreground mb-4">
                       Load 15 classic Harry Potter spells with their traditional wand movements.
                     </div>
-                    <Button
-                      onClick={loadHarryPotterSpells}
-                      className="w-full"
-                      data-testid="button-load-hp-spells"
-                    >
-                      Activate Harry Potter Spells
-                    </Button>
+                    <div className="grid grid-cols-1 gap-2">
+                      <Button
+                        onClick={loadHarryPotterSpells}
+                        className="w-full"
+                        data-testid="button-load-hp-spells"
+                      >
+                        Activate Harry Potter Spells
+                      </Button>
+                      
+                      <Button
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => setShowSpellGuide(true)}
+                        disabled={Object.keys(learnedSpells).length === 0}
+                        data-testid="button-show-spell-guide"
+                      >
+                        📖 Show Spell Guide
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -1175,7 +1277,7 @@ export default function WandTracker() {
                       <div className="mt-2 text-xs text-muted-foreground space-y-1">
                         <div>Wand Status: {wandStatus ? 'Detected' : 'Not detected'}</div>
                         <div>Trail Points: {spellPointsRef.current?.length || 0}</div>
-                        <div>Learning: {isLearningSpell ? `Pattern ${learningStep + 1}/3` : 'Off'}</div>
+                        <div>Learning: {isLearningSpell ? `Pattern ${learningStep + 1}/${simpleSpellLearning ? 1 : 3}` : 'Off'}</div>
                       </div>
                     )}
                   </CardContent>
@@ -1298,6 +1400,20 @@ export default function WandTracker() {
                         <span className="text-sm text-foreground w-8">{spellWindow[0]}</span>
                       </div>
                       
+                      <div className="flex items-center space-x-2" title="How long spell names display and wait before recognizing next spell">
+                        <label className="text-sm text-muted-foreground whitespace-nowrap min-w-16">Spell Display Time:</label>
+                        <Slider
+                          value={spellDisplayTime}
+                          onValueChange={setSpellDisplayTime}
+                          min={1000}
+                          max={5000}
+                          step={500}
+                          className="flex-1 min-w-0"
+                          data-testid="slider-spell-display-time"
+                        />
+                        <span className="text-sm text-foreground w-8">{(spellDisplayTime[0] / 1000).toFixed(1)}s</span>
+                      </div>
+                      
                       <div className="pt-2 border-t">
                         <Button
                           onClick={clearCanvas}
@@ -1390,6 +1506,52 @@ export default function WandTracker() {
           }}
           data-testid="wand-indicator"
         />
+      )}
+      
+      {/* Spell Guide Modal */}
+      {showSpellGuide && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">📖 Spell Guide</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSpellGuide(false)}
+                data-testid="button-close-spell-guide"
+              >
+                ✕
+              </Button>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Here are all your learned spells and how to draw them:
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(learnedSpells).map(([spellName, pattern]) => (
+                  <div key={spellName} className="border rounded-lg p-3">
+                    <h3 className="font-medium mb-2">{spellName}</h3>
+                    <div className="relative bg-muted/20 rounded h-24 border flex items-center justify-center">
+                      <svg width="80" height="60" viewBox="0 0 100 100" className="text-primary">
+                        <path
+                          d={`M ${pattern.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ')}`}
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          fill="none"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {pattern.length} points
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
