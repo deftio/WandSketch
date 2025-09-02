@@ -950,6 +950,10 @@ export default function WandTracker() {
           <span className="text-xs text-muted-foreground">Spells</span>
         </div>
         
+        <div className="text-2xl font-light text-muted-foreground/70">
+          Spell Caster
+        </div>
+        
         <div className="flex space-x-3 items-center">
           <StatusIndicator status={cameraStatus} label="Camera" />
           <StatusIndicator status={mlStatus && !isPaused} label={isPaused ? "Paused" : "Tracking"} />
@@ -1023,12 +1027,6 @@ export default function WandTracker() {
           </TabsList>
 
           <TabsContent value="tracker">
-            <div className="control-panel px-4 sm:px-6 py-4 rounded-xl shadow-xl">
-              <div className="text-center text-muted-foreground">
-                <p>Use the top controls to pause/resume tracking.</p>
-                <p>Adjust settings in the Settings tab.</p>
-              </div>
-            </div>
           </TabsContent>
 
           <TabsContent value="spells">
