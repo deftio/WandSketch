@@ -298,39 +298,43 @@ export default function WandTracker() {
     }
   }, [isVideoVisible, flipHorizontal, flipVertical, trailLength, sensitivity, smoothing, isPaused, learnedSpells, spellWindow, spellDisplayTime, simpleSpellLearning]);
   
-  // Load MediaPipe scripts
-  const loadMediaPipeScripts = useCallback(() => {
-    return new Promise<void>((resolve, reject) => {
-      if (window.Hands && window.Camera) {
-        resolve();
-        return;
-      }
-
-      const scripts = [
-        'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
-        'https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js',
-        'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
-        'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js'
-      ];
-
-      let loadedCount = 0;
-
-      scripts.forEach(src => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = () => {
-          loadedCount++;
-          if (loadedCount === scripts.length) {
-            setTimeout(resolve, 500); // Small delay to ensure all scripts are ready
-          }
-        };
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
+  // Load a single script as a promise
+  const loadScript = useCallback((src: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if (existing) { resolve(); return; }
+      const script = document.createElement('script');
+      script.src = src;
+      script.crossOrigin = 'anonymous';
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load: ${src}`));
+      document.head.appendChild(script);
     });
   }, []);
 
-  // Initialize canvas
+  // Load MediaPipe scripts sequentially to avoid race conditions
+  const loadMediaPipeScripts = useCallback(async () => {
+    if (window.Hands) return;
+
+    const scripts = [
+      'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
+      'https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js',
+      'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
+      'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js'
+    ];
+
+    for (const src of scripts) {
+      await loadScript(src);
+    }
+
+    await new Promise(r => setTimeout(r, 300));
+
+    if (!window.Hands) {
+      throw new Error('MediaPipe Hands failed to initialize after script load');
+    }
+  }, [loadScript]);
+
+  // Initialize canvas with devicePixelRatio support for high-DPI screens
   const initCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
@@ -338,15 +342,21 @@ export default function WandTracker() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
+    const dpr = window.devicePixelRatio || 1;
+
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Set drawing style
     ctx.strokeStyle = 'hsl(210, 20%, 85%)';
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
@@ -725,7 +735,7 @@ export default function WandTracker() {
   const drawTrail = useCallback((ctx: CanvasRenderingContext2D) => {
     if (trailPointsRef.current.length < 2) return;
 
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
     const currentTime = Date.now();
     const trailLengthMs = trailLength[0] * 1000;
@@ -782,8 +792,9 @@ export default function WandTracker() {
         const normalizedX = flipHorizontal ? (1 - wandTip.x) : wandTip.x;
         const normalizedY = flipVertical ? (1 - wandTip.y) : wandTip.y;
         
-        const x = normalizedX * canvasRef.current.width;
-        const y = normalizedY * canvasRef.current.height;
+        // Use logical (CSS) pixel dimensions, not physical canvas pixels
+        const x = normalizedX * window.innerWidth;
+        const y = normalizedY * window.innerHeight;
 
         addTrailPoint(x, y);
         lastDetectedTimeRef.current = Date.now();
@@ -841,43 +852,67 @@ export default function WandTracker() {
     }
   }, [sensitivity, onResults]);
 
-  // Initialize camera
+  // Manual frame loop ref for sending video to MediaPipe
+  const frameLoopRef = useRef<number | null>(null);
+  const isProcessingRef = useRef(false);
+
+  // Initialize camera with fallback for devices where Camera utility fails
   const initCamera = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
           facingMode: 'user'
         }
-      });
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       const video = videoRef.current;
       if (!video) throw new Error('Video element not found');
 
       video.srcObject = stream;
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
+      video.muted = true;
 
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => resolve();
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Video metadata timeout')), 10000);
+        video.onloadedmetadata = () => { clearTimeout(timeout); resolve(); };
       });
+
+      try {
+        await video.play();
+      } catch (playError) {
+        console.warn('Auto-play failed, will retry on user interaction:', playError);
+      }
 
       setCameraStatus(true);
 
-      // Initialize camera utils
-      if (window.Camera && handsRef.current) {
-        const camera = new window.Camera(video, {
-          onFrame: async () => {
-            if (handsRef.current) {
-              await handsRef.current.send({ image: video });
-            }
-          },
-          width: 1280,
-          height: 720
-        });
+      // Use manual frame loop instead of @mediapipe/camera_utils Camera
+      // The Camera utility is unreliable on newer Android devices (S25+, Pixel 9, etc.)
+      const sendFrame = async () => {
+        if (!handsRef.current || !video || video.readyState < 2) {
+          frameLoopRef.current = requestAnimationFrame(sendFrame);
+          return;
+        }
+        if (isProcessingRef.current) {
+          frameLoopRef.current = requestAnimationFrame(sendFrame);
+          return;
+        }
 
-        cameraRef.current = camera;
-        camera.start();
-      }
+        isProcessingRef.current = true;
+        try {
+          await handsRef.current.send({ image: video });
+        } catch (err) {
+          // Silently handle frame send errors (can happen during tab switches)
+        }
+        isProcessingRef.current = false;
+        frameLoopRef.current = requestAnimationFrame(sendFrame);
+      };
+
+      frameLoopRef.current = requestAnimationFrame(sendFrame);
 
       return true;
     } catch (error) {
@@ -926,7 +961,7 @@ export default function WandTracker() {
     if (canvas) {
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       }
     }
   }, []);
@@ -957,8 +992,11 @@ export default function WandTracker() {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+      if (frameLoopRef.current) {
+        cancelAnimationFrame(frameLoopRef.current);
+      }
       if (cameraRef.current) {
-        cameraRef.current.stop();
+        try { cameraRef.current.stop(); } catch (e) { /* ignore */ }
       }
       if (spellTimeout) {
         clearTimeout(spellTimeout);
